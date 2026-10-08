@@ -29,12 +29,8 @@ func (s *Server) HandleRenamePerson(ctx context.Context, args map[string]interfa
 		g := s.graph.WithTx(tx)
 		var id string
 		var err error
-		id, oldName, err = st.FindPerson(name)
-		if errors.Is(err, sql.ErrNoRows) {
-			return fmt.Errorf("person %q not found (see list_people)", name)
-		}
-		if err != nil {
-			return fmt.Errorf("find person %q: %w", name, err)
+		if id, oldName, err = resolvePerson(st, name); err != nil {
+			return err
 		}
 		// The new name may differ only in case or accents ("Sergio" →
 		// "Sérgio"), but must not be someone else's

@@ -36,6 +36,11 @@ func (s *Server) HandleIngest(ctx context.Context, args map[string]interface{}) 
 	aboutPersonHint, _ := args["about_person"].(string)
 	segments, _ := args["segments"].([]string)
 	hostExtraction, _ := args["extraction"].(*providers.EntityExtraction)
+	confirmedNew := map[string]bool{} // new people the host confirmed aren't a similar stored one
+	newPersons, _ := args["new_persons"].([]string)
+	for _, name := range newPersons {
+		confirmedNew[sqlite.FoldName(name)] = true
+	}
 	occurredArg, _ := args["occurred_at"].(string)
 	occurredAt, err := parseOccurredAt(occurredArg, time.Now())
 	if err != nil {
@@ -90,7 +95,7 @@ func (s *Server) HandleIngest(ctx context.Context, args map[string]interface{}) 
 		g := s.graph.WithTx(tx)
 		var err error
 		person := func(name, role string) (string, error) {
-			id, storedName, created, err := ensurePerson(st, g, name, role)
+			id, storedName, created, err := ensurePerson(st, g, name, role, confirmedNew)
 			if err != nil {
 				return "", err
 			}
@@ -404,7 +409,12 @@ func (s *Server) normalizeExtraction(ex *providers.EntityExtraction) error {
 // ensurePerson returns the ID and stored name of the person with the given
 // name (ignoring case and accents), creating them in SQLite and in the graph
 // if they don't exist yet. A non-empty role updates the person's role.
-func ensurePerson(st *sqlite.Store, g graph.GraphEngine, name, role string) (id, storedName string, created bool, err error) {
+//
+// A new name that may be someone already stored ("Osmar" when "Osmar de
+// Morais Junior" is known, or the other way round) is refused unless it is
+// in confirmedNew (folded): matching it silently could attach the memory to
+// the wrong person, and creating it silently splits one person in two.
+func ensurePerson(st *sqlite.Store, g graph.GraphEngine, name, role string, confirmedNew map[string]bool) (id, storedName string, created bool, err error) {
 	id, storedName, err = st.FindPerson(name)
 	if err == nil {
 		if role != "" {
@@ -419,6 +429,15 @@ func ensurePerson(st *sqlite.Store, g graph.GraphEngine, name, role string) (id,
 	}
 	if !errors.Is(err, sql.ErrNoRows) {
 		return "", "", false, fmt.Errorf("find person %q: %w", name, err)
+	}
+	if !confirmedNew[sqlite.FoldName(name)] {
+		similar, err := st.SimilarPeople(name)
+		if err != nil {
+			return "", "", false, fmt.Errorf("find people like %q: %w", name, err)
+		}
+		if len(similar) > 0 {
+			return "", "", false, fmt.Errorf("%q may be someone already stored: %s. Ask the user: if it's the same person, use the stored name; if it's someone else, call again with %q in new_persons", name, quotedNames(similar), name)
+		}
 	}
 	id = generateID("person")
 	if err := st.InsertPerson(id, name, role, "", "", 0); err != nil {

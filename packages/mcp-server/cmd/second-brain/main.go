@@ -105,6 +105,7 @@ func serve(args []string) {
 				"about_person": in.AboutPerson,
 				"segments":     in.Segments,
 				"occurred_at":  in.OccurredAt,
+				"new_persons":  in.NewPersons,
 				"extraction":   in.extraction(),
 			}
 			result, err := sb.HandleIngest(ctx, argsMap)
@@ -253,6 +254,7 @@ type ingestArgs struct {
 	Relationships []relationshipArg `json:"relationships,omitempty" jsonschema:"reporting lines and other person-to-person relationships stated in the content"`
 	FeedbackItems []feedbackItemArg `json:"feedback_items,omitempty" jsonschema:"feedback about someone, split into the configured categories"`
 	FeedbackFrom  string            `json:"feedback_from,omitempty" jsonschema:"who gave the feedback, when it was relayed by someone else"`
+	NewPersons    []string          `json:"new_persons,omitempty" jsonschema:"names that are new people although ingest said they may be someone already stored, after the user confirmed they are someone else"`
 }
 
 type personArg struct {
@@ -325,7 +327,7 @@ func ingestDescription(cfg *config.Config) string {
 		"For long content (a meeting transcript, a long voice note), also pass segments: the same text split by subject into consecutive passages of a few paragraphs, so search can find each subject.",
 		"Then extract what the content states, without inventing:",
 		"- about_person: who the memory is mainly about.",
-		"- persons: everyone mentioned (with role when stated). Call list_people first and reuse the stored names for people already known.",
+		"- persons: everyone mentioned (with role when stated). Call list_people first and reuse the stored names for people already known. A new name that looks like a stored one (\"Osmar\" when \"Osmar de Morais Junior\" is stored) is refused: ask the user whether it's the same person (then use the stored name) or someone else (then pass it in new_persons).",
 		"- topics: a few short themes, reusing the same words across memories (they are counted to spot patterns).",
 		"- tasks: follow-ups, with owner (who does it) and about_person (who it concerns).",
 		"- relationships: reporting lines (REPORTS_TO) and mentoring (MENTORS) stated in the content.",

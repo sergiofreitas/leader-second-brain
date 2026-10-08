@@ -324,6 +324,66 @@ func (s *Store) FindPerson(name string) (id, storedName string, err error) {
 	return "", "", sql.ErrNoRows
 }
 
+// nameConnectors are left out when names are compared word by word
+var nameConnectors = map[string]bool{"da": true, "de": true, "do": true, "das": true, "dos": true, "e": true}
+
+// nameWords returns the words of a name that identify it: folded (no case,
+// no accents), without connectors
+func nameWords(name string) []string {
+	var ws []string
+	for _, w := range strings.Fields(FoldName(name)) {
+		if !nameConnectors[w] {
+			ws = append(ws, w)
+		}
+	}
+	return ws
+}
+
+// hasAllWords reports whether every word of want is in have
+func hasAllWords(have, want []string) bool {
+	if len(want) == 0 {
+		return false
+	}
+	set := make(map[string]bool, len(have))
+	for _, w := range have {
+		set[w] = true
+	}
+	for _, w := range want {
+		if !set[w] {
+			return false
+		}
+	}
+	return true
+}
+
+// MatchPeople returns the people whose name has every word of name: for
+// "Natiele" or "natiele silva", "Natiele Bastião da Silva"
+func (s *Store) MatchPeople(name string) ([]Person, error) {
+	return s.filterPeople(func(p []string) bool { return hasAllWords(p, nameWords(name)) })
+}
+
+// SimilarPeople returns the people who may be the person called name: their
+// name has every word of name, or name has every word of theirs ("Osmar"
+// and "Osmar de Morais Junior")
+func (s *Store) SimilarPeople(name string) ([]Person, error) {
+	ws := nameWords(name)
+	return s.filterPeople(func(p []string) bool { return hasAllWords(p, ws) || hasAllWords(ws, p) })
+}
+
+func (s *Store) filterPeople(match func(words []string) bool) ([]Person, error) {
+	people, err := s.ListPersons()
+	if err != nil {
+		return nil, err
+	}
+	var matched []Person
+	for _, p := range people {
+		if match(nameWords(p.Name)) {
+			matched = append(matched, p)
+		}
+	}
+	return matched, nil
+}
+
 // Person is a row of the persons table
 type Person struct {
 	ID   string `json:"id"`

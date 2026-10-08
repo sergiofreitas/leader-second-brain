@@ -167,18 +167,11 @@ func (s *Server) HandleRecall(ctx context.Context, args map[string]interface{}) 
 		return nil, err
 	}
 
-	// Find the person (ignoring case and accents) and use the stored name
-	personID, storedName, err := s.store.FindPerson(personName)
-	if err == nil {
-		personName = storedName
-	}
+	// Find the person (ignoring case and accents, or by part of the name)
+	// and use the stored name
+	personID, personName, err := resolvePerson(s.store, personName)
 	if err != nil {
-		return &ToolResult{
-			Content: []ContentBlock{{
-				Type: "text",
-				Text: fmt.Sprintf("Person '%s' not found in the knowledge base. Use 'ingest' to add memories about this person first.", personName),
-			}},
-		}, nil
+		return lookupMiss(err)
 	}
 
 	// Get full context from graph
@@ -237,14 +230,9 @@ func (s *Server) HandleListPeople(ctx context.Context, args map[string]interface
 func (s *Server) HandleGetTeamContext(ctx context.Context, args map[string]interface{}) (*ToolResult, error) {
 	leaderName, _ := args["leader_name"].(string)
 
-	leaderID, err := s.store.GetPersonByName(leaderName)
+	leaderID, leaderName, err := resolvePerson(s.store, leaderName)
 	if err != nil {
-		return &ToolResult{
-			Content: []ContentBlock{{
-				Type: "text",
-				Text: fmt.Sprintf("Leader '%s' not found in the knowledge base.", leaderName),
-			}},
-		}, nil
+		return lookupMiss(err)
 	}
 
 	// Get team hierarchy from graph
