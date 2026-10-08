@@ -60,6 +60,10 @@ Call `list_people` if new people are mentioned, then `ingest` with:
 - `tasks`: the leader's tasks (`owner`: the leader) and the led's tasks
   (`owner`: the led), with `about_person`: the led
 - `feedback_items` only if explicit feedback was given in the 1:1
+- `occurred_at` (`YYYY-MM-DD`): the day of the 1:1, when it wasn't today
+
+Tasks from the briefing that the 1:1 shows were done: call `complete_task`
+with their `id` (from `pending_tasks`).
 
 ## Output
 

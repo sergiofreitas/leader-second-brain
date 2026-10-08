@@ -13,7 +13,8 @@ description: |
 
 ## 1. Context first
 
-Call `recall(person_name, context: "feedback")` and look at:
+Call `recall(person_name, context: "feedback", time_range: "all")` — every
+feedback ever given, not only the last 90 days — and look at:
 - feedbacks already given (their items and dates) — don't repeat a point
   unless it is a follow-up, and then say so
 - observations that support, or contradict, what the leader wants to say
@@ -39,6 +40,7 @@ When the leader approves, call `ingest` with:
   report of the person)
 - `topics` reusing the words already used for this person (see the recall)
 - `tasks` for agreed follow-ups, with `owner` and `about_person`
+- `occurred_at` (`YYYY-MM-DD`) when the feedback was given on another day
 
 Call `list_people` first if anyone new is mentioned, to reuse stored names.
 

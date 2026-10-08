@@ -84,9 +84,13 @@ failing, its result includes an `index_status` with the progress and the
 last error. Changing `model` or `dimensions` re-embeds every passage with the
 new model; switching between providers that serve the same model doesn't.
 
-The server refuses to start with an unknown provider or a missing required
-field, with a message saying what to fix (e.g. an `api_key` whose
-environment variable isn't set).
+An embedding provider that can't start — an unknown provider, a missing
+required field, an `api_key` whose environment variable isn't set — doesn't
+stop the server: it runs with keyword search only and says why, in the
+`search_memories` description and results (`semantic_unavailable`) and in
+`ingest`'s `semantic_index`, so the MCP host can tell the user what to fix.
+An environment variable set after the MCP host was started isn't seen by
+the server: restart the host (and the terminal or editor it runs in).
 
 ### feedback
 

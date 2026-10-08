@@ -13,7 +13,8 @@ description: |
 
 ## Context first
 
-Call `recall(person_name, context: "pdi")` for the previous assessments,
+Call `recall(person_name, context: "pdi", time_range: "all")` for the
+previous assessments (all of them, to see the progression),
 feedbacks, observations and recurring topics. Use them as evidence to
 support — or question — what the leader describes. For a specific valence,
 `search_memories` with `query` and `terms` (synonyms, inflections, prefixes
@@ -37,7 +38,8 @@ like `comunic*`) finds older observations.
 
 When the leader approves the assessment, call `ingest` with
 `memory_type: "assessment"`, `about_person`, the report as `content`, the
-valences with gaps as `topics`, and the agreed development actions as
-`tasks` (`owner` and `about_person`).
+valences with gaps as `topics`, the agreed development actions as
+`tasks` (`owner` and `about_person`), and `occurred_at` (`YYYY-MM-DD`) when
+the assessment happened on another day.
 
 Answer in the user's language (default: Portuguese).

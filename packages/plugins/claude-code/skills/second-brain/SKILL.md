@@ -7,7 +7,7 @@ description: |
   with `recall`, `search_memories` and `get_team_context` before 1:1s, PDIs
   and feedback sessions. Use it when the user wants to remember something
   about a person ("anota que...", "registra que..."), get a briefing, search
-  their memories, or review their team.
+  their memories, close a follow-up ("já fiz..."), or review their team.
 ---
 
 # Second Brain — capture and recall
@@ -23,9 +23,10 @@ who and what it is about, and send it already structured to `ingest`.
 | `list_people` | See who is already known, to reuse their exact names |
 | `ingest` | Store a memory with the entities you extracted |
 | `rename_person` | Give a known person a new name (their full name, a typo fix) |
+| `complete_task` | Mark a follow-up as done |
 | `recall` | Get the full context about a person for a situation |
 | `search_memories` | Find memories by subject, word or meaning |
-| `get_team_context` | See everyone under a leader |
+| `get_team_context` | Review a leader's team: each person and what they share |
 
 ## Capturing (ingest)
 
@@ -35,6 +36,10 @@ who and what it is about, and send it already structured to `ingest`.
    corrected name for someone already stored ("o Osmar é o Osmar de Morais
    Junior"), call `rename_person` first, then use the new name: ingesting
    the new name directly would create a second person.
+   If `ingest` refuses a name because it "may be someone already stored"
+   ("Natiele" when "Natiele Bastião da Silva" is known), **ask the user**:
+   the same person → use the stored name; someone else → call again with
+   that name in `new_persons`. Never decide it yourself.
 2. **Get the text.** Keep the user's words and language; don't summarize the
    content itself.
    - Text: use it as is.
@@ -48,7 +53,8 @@ who and what it is about, and send it already structured to `ingest`.
    - `about_person` — who the memory is mainly about
    - `persons` — everyone mentioned, with their `role` when stated
    - `topics` — 1 to 4 short themes, reusing words already used for that
-     person (they are counted to show patterns, e.g. "microgestão")
+     person and the team (they are counted to show patterns, e.g.
+     "microgestão", and shared across people in the team review)
    - `tasks` — follow-ups, with `owner` (who does it) and `about_person`
      (who it concerns)
    - `relationships` — reporting lines (`REPORTS_TO`: from reports to to)
@@ -59,6 +65,11 @@ who and what it is about, and send it already structured to `ingest`.
      the `ingest` tool description) and `feedback_from` when someone else
      gave it
    - `summary` — one sentence
+   - `occurred_at` — the day it happened (`YYYY-MM-DD`) when it wasn't
+     today: "a avaliação foi em 02/09", "o 1:1 de segunda". Briefings order
+     and filter by it, so don't leave the date only in `content`. Several
+     records of the same day (a score and the feedback given with it) get
+     the same `occurred_at`.
 4. **Long content** (a meeting transcript, a long voice note): also send
    `segments` — the same text split by subject into consecutive passages of
    a few paragraphs. Search finds each subject much better.
@@ -68,6 +79,11 @@ who and what it is about, and send it already structured to `ingest`.
 
 If `ingest` rejects the call, the error names the field and the valid
 values: fix it and call again.
+
+**Follow-ups done.** When the user says a task was done ("já fiz a avaliação
+do Evandro", "marquei os 1:1s"), find it in `pending_tasks` of `recall` or
+`get_team_context` and call `complete_task` with its `id`. If what was done
+is worth remembering (how the evaluation went), also `ingest` it.
 
 ### Example
 
@@ -97,9 +113,15 @@ ingest(
 
 - Before a 1:1, PDI or feedback: `recall(person_name, context)` with
   context `1:1`, `pdi`, `feedback`, `team_review`, `progression` or
-  `general`. It returns the hierarchy, memories, pending tasks (with who
-  owns them), feedbacks (with their items and who gave them), assessments,
-  recurring topics and a recommendation.
+  `general`. The name can be how the leader calls the person ("Natiele");
+  if several people match, the answer lists them: ask which one. It returns
+  the hierarchy, memories, pending tasks (with who owns them and their id),
+  tasks completed in the period, feedbacks (with their items and who gave
+  them), assessments, recurring topics and a recommendation. It covers the
+  last 90 days by when things happened; pass `time_range` (`last_30d`,
+  `last_year`, `all`) for another period. Dates are in `occurred_at` (when
+  it happened) and `created_at` (when it was recorded): cite `occurred_at`
+  when there is one.
 - For a subject ("quando falamos de delegação?", "observações sobre
   comunicação"): `search_memories` with `query` **and `terms`** — 5 to 15
   synonyms, other inflections, prefixes ending in `*` (`deleg*`,
@@ -108,7 +130,13 @@ ingest(
   Results found only by meaning (`matched_by: ["semantic"]`) with low
   similarity may be unrelated: judge them before using them. An
   `index_status` means recent memories may not be searchable by meaning yet.
-- For a team: `get_team_context(leader_name)`.
+- For a team ("como está o time?", "que ações coletivas fazer?"):
+  `get_team_context(leader_name)`. For each person it returns pending tasks,
+  last feedback, last assessment, recurring topics and `signals`
+  (`no_feedback`, `no_recent_memory`, `stale_task`). `shared_topics` lists
+  the topics several people share and who — the starting point for
+  collective actions — and `leader_pending_tasks` what the leader has to do.
+  The topics are only as good as their reuse: same words across people.
 
 Present what you found as a briefing for the situation, citing dates, and
 say what is missing rather than filling gaps.
