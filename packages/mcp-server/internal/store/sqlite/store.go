@@ -312,6 +312,24 @@ func (s *Store) SetPersonRole(id, role string) error {
 	return err
 }
 
+// SetPersonName renames a person. Memories keep the name they are about in
+// about_person: update them with SetMemoryAboutPerson.
+func (s *Store) SetPersonName(id, name string) error {
+	_, err := s.q.Exec(`UPDATE persons SET name = ? WHERE id = ?`, name, id)
+	return err
+}
+
+// SetMemoryAboutPerson changes the name a memory is about; the FTS index
+// follows through the update trigger. Reports whether the memory exists.
+func (s *Store) SetMemoryAboutPerson(memoryID, name string) (bool, error) {
+	res, err := s.q.Exec(`UPDATE memories SET about_person = ? WHERE id = ?`, name, memoryID)
+	if err != nil {
+		return false, err
+	}
+	n, err := res.RowsAffected()
+	return n > 0, err
+}
+
 // accentFolder maps accented Latin letters (as used in Portuguese and
 // Spanish names) to their base letter
 var accentFolder = strings.NewReplacer(

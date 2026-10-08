@@ -140,6 +140,7 @@ the server sends nothing anywhere.
 |------|---------|
 | `ingest` | Store a memory (text, or audio/image/video transcribed or described by the host) with the entities the host extracted — persons, topics, tasks, relationships, feedback items |
 | `list_people` | List known people, so the host reuses their stored names |
+| `rename_person` | Rename a known person everywhere their name is stored (memories, tasks, feedbacks); refuses another person's name |
 | `recall` | Retrieve context about a person for 1:1, PDI, feedback, or team review |
 | `get_team_context` | Overview of all reports under a leader (recursive hierarchy) |
 | `search_memories` | Search by keyword (FTS5, with synonyms and inflections added by the host) and, with an embedding provider configured, by meaning — fused into one ranking, with the best matching passage of each memory |

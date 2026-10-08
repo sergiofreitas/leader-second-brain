@@ -15,7 +15,7 @@ MCP Host (Claude Code, Codex, OpenCode)
     ▼
 MCP Server (Go binary)
     │
-    ├── Tools: ingest | list_people | recall | get_team_context | search_memories
+    ├── Tools: ingest | list_people | rename_person | recall | get_team_context | search_memories
     │
     ├── Graph Engine: SQLite tables + recursive CTEs
     ├── Vector Search: in-memory cosine similarity over passages (optional)

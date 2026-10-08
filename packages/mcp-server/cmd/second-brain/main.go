@@ -129,6 +129,24 @@ func serve(args []string) {
 		},
 	)
 
+	// --- rename_person ---
+	mcp.AddTool(server,
+		&mcp.Tool{
+			Name:        "rename_person",
+			Description: "Rename a known person, e.g. to their full name or to fix a typo. Updates the name everywhere it is stored: the person, the memories about them, the tasks they own and the feedbacks they gave. Use it instead of ingesting the new name, which would create a second person. It refuses a name that already belongs to someone else.",
+		},
+		func(ctx context.Context, req *mcp.CallToolRequest, in renameArgs) (*mcp.CallToolResult, any, error) {
+			result, err := sb.HandleRenamePerson(ctx, map[string]interface{}{
+				"name":     in.Name,
+				"new_name": in.NewName,
+			})
+			if err != nil {
+				return nil, nil, err
+			}
+			return toCallToolResult(result), nil, nil
+		},
+	)
+
 	// --- recall ---
 	mcp.AddTool(server,
 		&mcp.Tool{
@@ -308,6 +326,11 @@ type recallArgs struct {
 
 type teamArgs struct {
 	LeaderName string `json:"leader_name" jsonschema:"name of the leader whose team to review"`
+}
+
+type renameArgs struct {
+	Name    string `json:"name" jsonschema:"the person's current name, as stored (see list_people)"`
+	NewName string `json:"new_name" jsonschema:"the new name, e.g. the full name"`
 }
 
 type searchArgs struct {

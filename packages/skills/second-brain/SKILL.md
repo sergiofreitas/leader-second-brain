@@ -22,6 +22,7 @@ who and what it is about, and send it already structured to `ingest`.
 |------|-----------|
 | `list_people` | See who is already known, to reuse their exact names |
 | `ingest` | Store a memory with the entities you extracted |
+| `rename_person` | Give a known person a new name (their full name, a typo fix) |
 | `recall` | Get the full context about a person for a situation |
 | `search_memories` | Find memories by subject, word or meaning |
 | `get_team_context` | See everyone under a leader |
@@ -30,7 +31,10 @@ who and what it is about, and send it already structured to `ingest`.
 
 1. **Call `list_people` first** and reuse the stored names: if "Sérgio" is
    known, don't create "Sergio" or "o Serjão". (The server also matches
-   names ignoring case and accents.)
+   names ignoring case and accents.) When the user gives a fuller or
+   corrected name for someone already stored ("o Osmar é o Osmar de Morais
+   Junior"), call `rename_person` first, then use the new name: ingesting
+   the new name directly would create a second person.
 2. **Get the text.** Keep the user's words and language; don't summarize the
    content itself.
    - Text: use it as is.

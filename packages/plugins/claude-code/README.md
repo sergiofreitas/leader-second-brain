@@ -44,6 +44,7 @@ team and recall it before 1:1s, PDIs and feedback sessions.
 |------|---------|
 | `ingest` | Store a memory with the entities Claude extracted from it |
 | `list_people` | Known people, to reuse their stored names |
+| `rename_person` | Rename a known person (full name, typo fix) |
 | `recall` | Context about a person for a 1:1, PDI, feedback... |
 | `get_team_context` | Everyone under a leader |
 | `search_memories` | Search by keyword (plus synonyms) and, if configured, by meaning |
