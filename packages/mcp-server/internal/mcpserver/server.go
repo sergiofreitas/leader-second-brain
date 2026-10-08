@@ -260,11 +260,7 @@ func (s *Server) HandleIngest(ctx context.Context, args map[string]interface{}) 
 
 	// Step 6: Add persons to graph
 	for _, p := range extraction.Persons {
-		personID := generateID("person")
-		_ = s.store.UpsertPerson(personID, p.Name, p.Role, "", "", 0)
-		_ = s.graph.AddNode("Person", personID, map[string]interface{}{
-			"name": p.Name, "role": p.Role,
-		})
+		_, _ = s.ensurePerson(p.Name, p.Role)
 	}
 
 	// Step 7: Add memory node and edges to graph
@@ -274,7 +270,7 @@ func (s *Server) HandleIngest(ctx context.Context, args map[string]interface{}) 
 	})
 
 	if extraction.AboutPerson != "" {
-		personID, err := s.store.GetPersonByName(extraction.AboutPerson)
+		personID, err := s.ensurePerson(extraction.AboutPerson, "")
 		if err == nil {
 			_ = s.graph.AddEdge(memID, personID, "ABOUT", nil)
 		}
@@ -466,6 +462,24 @@ func (s *Server) Close() error {
 // generateID creates a unique ID with a prefix
 func generateID(prefix string) string {
 	return fmt.Sprintf("%s_%d", prefix, time.Now().UnixNano())
+}
+
+// ensurePerson returns the ID of the person with the given name,
+// creating them in SQLite and in the graph if they don't exist yet
+func (s *Server) ensurePerson(name, role string) (string, error) {
+	if personID, err := s.store.GetPersonByName(name); err == nil {
+		return personID, nil
+	}
+	personID := generateID("person")
+	if err := s.store.UpsertPerson(personID, name, role, "", "", 0); err != nil {
+		return "", fmt.Errorf("upsert person: %w", err)
+	}
+	if err := s.graph.AddNode("Person", personID, map[string]interface{}{
+		"name": name, "role": role,
+	}); err != nil {
+		return "", fmt.Errorf("add person node: %w", err)
+	}
+	return personID, nil
 }
 
 // Adapter returns the configured output adapter
