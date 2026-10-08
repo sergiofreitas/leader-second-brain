@@ -13,10 +13,10 @@ type TranscriptionProvider interface {
 }
 
 type TranscriptionResult struct {
-	Text      string
-	Language  string
-	Duration  float64 // seconds
-	Segments  []TranscriptionSegment
+	Text     string
+	Language string
+	Duration float64 // seconds
+	Segments []TranscriptionSegment
 }
 
 type TranscriptionSegment struct {
@@ -75,13 +75,13 @@ type ExtractionConfig struct {
 // The LLM detects what kind of content this is (observation, feedback, 1:1, etc.)
 // and extracts entities accordingly.
 type EntityExtraction struct {
-	MemoryType    string             `json:"memory_type"`    // observation | feedback | one_on_one | assessment | voice_note
-	Summary       string             `json:"summary"`
-	AboutPerson   string             `json:"about_person"`
-	Persons       []ExtractedPerson  `json:"persons"`
-	Topics        []string           `json:"topics"`
-	Tasks         []ExtractedTask    `json:"tasks"`
-	Relationships []ExtractedRel     `json:"relationships"`
+	MemoryType    string                  `json:"memory_type"` // observation | feedback | one_on_one | assessment | voice_note
+	Summary       string                  `json:"summary"`
+	AboutPerson   string                  `json:"about_person"`
+	Persons       []ExtractedPerson       `json:"persons"`
+	Topics        []string                `json:"topics"`
+	Tasks         []ExtractedTask         `json:"tasks"`
+	Relationships []ExtractedRel          `json:"relationships"`
 	FeedbackItems []ExtractedFeedbackItem `json:"feedback_items,omitempty"`
 	// FeedbackFrom is who gave the feedback, when it was relayed by someone
 	// else (e.g. a report talking about their manager)
@@ -114,7 +114,7 @@ type ExtractedRel struct {
 // ExtractedFeedbackItem is a single feedback item detected by the LLM.
 // Categories come from the configured feedback format — not hardcoded.
 type ExtractedFeedbackItem struct {
-	Category string `json:"category"` // matches config FeedbackCategoryIDs
-	Content  string `json:"content"`
+	Category    string `json:"category"` // matches config FeedbackCategoryIDs
+	Content     string `json:"content"`
 	AboutPerson string `json:"about_person,omitempty"`
 }

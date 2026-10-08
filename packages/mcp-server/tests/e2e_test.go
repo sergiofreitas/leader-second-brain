@@ -117,7 +117,7 @@ func TestIngestRecallEndToEnd(t *testing.T) {
 	recallResult, err := srv.HandleRecall(ctx, map[string]interface{}{
 		"person_name": "Sérgio",
 		"context":     "1:1",
-		"time_range":   "all",
+		"time_range":  "all",
 	})
 	if err != nil {
 		t.Fatalf("recall failed: %v", err)

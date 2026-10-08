@@ -9,7 +9,6 @@ type GraphEngine interface {
 	// so graph writes can commit or roll back together with the store's
 	WithTx(tx *sql.Tx) GraphEngine
 
-
 	// Node operations
 	AddNode(label string, id string, props map[string]interface{}) error
 	GetNode(label string, id string) (map[string]interface{}, error)
@@ -54,11 +53,11 @@ type TraversalResult struct {
 
 // PatternQuery defines a graph pattern to match
 type PatternQuery struct {
-	StartLabel   string                 `json:"start_label"`
-	StartID      string                 `json:"start_id,omitempty"`
-	EdgeLabels   []string               `json:"edge_labels"`
-	TargetLabel  string                 `json:"target_label"`
-	WhereProps   map[string]interface{} `json:"where_props,omitempty"`
+	StartLabel  string                 `json:"start_label"`
+	StartID     string                 `json:"start_id,omitempty"`
+	EdgeLabels  []string               `json:"edge_labels"`
+	TargetLabel string                 `json:"target_label"`
+	WhereProps  map[string]interface{} `json:"where_props,omitempty"`
 }
 
 // QueryResult is a single match from a pattern query
@@ -70,16 +69,16 @@ type QueryResult struct {
 
 // PersonContext is the full context for a person in the graph
 type PersonContext struct {
-	NodeProps    map[string]interface{}   `json:"node_props"`
-	Managers     []map[string]interface{} `json:"managers"`
-	Reports      []map[string]interface{} `json:"reports"`
-	Memories     []map[string]interface{} `json:"memories"`
-	Tasks        []map[string]interface{} `json:"tasks"`
-	Feedbacks    []map[string]interface{} `json:"feedbacks"`
-	Assessments  []map[string]interface{} `json:"assessments"`
-	Skills       []map[string]interface{} `json:"skills"`
-	Patterns     []map[string]interface{} `json:"patterns"`
-	Signals      []map[string]interface{} `json:"signals"`
+	NodeProps   map[string]interface{}   `json:"node_props"`
+	Managers    []map[string]interface{} `json:"managers"`
+	Reports     []map[string]interface{} `json:"reports"`
+	Memories    []map[string]interface{} `json:"memories"`
+	Tasks       []map[string]interface{} `json:"tasks"`
+	Feedbacks   []map[string]interface{} `json:"feedbacks"`
+	Assessments []map[string]interface{} `json:"assessments"`
+	Skills      []map[string]interface{} `json:"skills"`
+	Patterns    []map[string]interface{} `json:"patterns"`
+	Signals     []map[string]interface{} `json:"signals"`
 }
 
 // HierarchyNode is a person in the hierarchy tree

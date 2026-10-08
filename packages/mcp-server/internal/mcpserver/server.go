@@ -10,6 +10,7 @@ import (
 	"log"
 	"time"
 
+	"github.com/second-brain/second-brain/packages/mcp-server/internal/adapters"
 	"github.com/second-brain/second-brain/packages/mcp-server/internal/chunk"
 	"github.com/second-brain/second-brain/packages/mcp-server/internal/config"
 	"github.com/second-brain/second-brain/packages/mcp-server/internal/indexer"
@@ -18,7 +19,6 @@ import (
 	"github.com/second-brain/second-brain/packages/mcp-server/internal/retrieve"
 	"github.com/second-brain/second-brain/packages/mcp-server/internal/store/graph"
 	"github.com/second-brain/second-brain/packages/mcp-server/internal/store/sqlite"
-	"github.com/second-brain/second-brain/packages/mcp-server/internal/adapters"
 )
 
 // Server holds all dependencies for the MCP server

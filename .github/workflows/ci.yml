@@ -1,0 +1,60 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  # The server runs on the leader's machine, so it is tested on each OS it
+  # ships for: clock resolution, paths and line endings differ (an ID
+  # collision only showed up on Windows).
+  test:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        shell: bash
+        working-directory: packages/mcp-server
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: packages/mcp-server/go.mod
+          cache-dependency-path: packages/mcp-server/go.sum
+
+      - name: Vet
+        run: go vet ./...
+
+      # -race needs cgo, which is only set up on the Linux runner
+      - name: Test
+        run: |
+          if [ "$RUNNER_OS" = "Linux" ]; then
+            go test -race ./...
+          else
+            go test ./...
+          fi
+
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: packages/mcp-server/go.mod
+          cache-dependency-path: packages/mcp-server/go.sum
+
+      - name: gofmt
+        run: |
+          unformatted=$(gofmt -l packages/mcp-server)
+          if [ -n "$unformatted" ]; then
+            echo "Run gofmt -w on:"; echo "$unformatted"; exit 1
+          fi
+
+      - name: Plugin skills are in sync
+        run: make check-skills

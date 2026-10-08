@@ -49,12 +49,12 @@ func (s *StubLLM) ExtractEntities(text string, config ExtractionConfig) (*Entity
 	// Return a minimal extraction — real implementation will call the LLM
 	// with a prompt that includes the feedback categories from config
 	return &EntityExtraction{
-		MemoryType:  "observation",
-		Summary:     text,
-		AboutPerson: "",
-		Persons:     []ExtractedPerson{},
-		Topics:      []string{},
-		Tasks:       []ExtractedTask{},
+		MemoryType:    "observation",
+		Summary:       text,
+		AboutPerson:   "",
+		Persons:       []ExtractedPerson{},
+		Topics:        []string{},
+		Tasks:         []ExtractedTask{},
 		Relationships: []ExtractedRel{},
 	}, nil
 }

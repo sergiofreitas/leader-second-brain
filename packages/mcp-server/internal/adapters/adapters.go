@@ -1,9 +1,9 @@
 package adapters
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
-	"bytes"
 	"net/http"
 	"os"
 

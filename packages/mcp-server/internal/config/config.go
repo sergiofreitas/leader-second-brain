@@ -12,13 +12,13 @@ import (
 
 // Config is the root configuration loaded from config.yaml
 type Config struct {
-	Profile    string         `yaml:"profile"`
-	Storage    StorageConfig  `yaml:"storage"`
-	Providers  ProvidersConfig `yaml:"providers"`
-	Transport  TransportConfig `yaml:"transport"`
-	Graph      GraphConfig    `yaml:"graph"`
-	Feedback   FeedbackConfig `yaml:"feedback"`
-	Skills     SkillsConfig   `yaml:"skills"`
+	Profile   string          `yaml:"profile"`
+	Storage   StorageConfig   `yaml:"storage"`
+	Providers ProvidersConfig `yaml:"providers"`
+	Transport TransportConfig `yaml:"transport"`
+	Graph     GraphConfig     `yaml:"graph"`
+	Feedback  FeedbackConfig  `yaml:"feedback"`
+	Skills    SkillsConfig    `yaml:"skills"`
 }
 
 // StorageConfig defines where data lives locally
@@ -81,7 +81,7 @@ func (e *EmbeddingConfig) UnmarshalYAML(value *yaml.Node) error {
 // TransportConfig defines how the MCP server communicates
 type TransportConfig struct {
 	Type string `yaml:"type"` // stdio | http
-	Port int   `yaml:"port,omitempty"`
+	Port int    `yaml:"port,omitempty"`
 }
 
 // GraphConfig defines which graph engine to use
@@ -91,10 +91,10 @@ type GraphConfig struct {
 
 // FeedbackConfig defines the feedback format for this organization
 type FeedbackConfig struct {
-	Format string `yaml:"format"` // stop_start_continue | freeform | sandwich
-	Categories []FeedbackCategory `yaml:"categories"`
-	ItemsPerCategory int `yaml:"items_per_category"`
-	TargetSystem string `yaml:"target_system"` // qulture | lattice | workday | markdown | json
+	Format           string             `yaml:"format"` // stop_start_continue | freeform | sandwich
+	Categories       []FeedbackCategory `yaml:"categories"`
+	ItemsPerCategory int                `yaml:"items_per_category"`
+	TargetSystem     string             `yaml:"target_system"` // qulture | lattice | workday | markdown | json
 }
 
 // FeedbackCategory defines a category within a feedback format
