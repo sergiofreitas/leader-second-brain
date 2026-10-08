@@ -2,6 +2,7 @@ package retrieve
 
 import (
 	"fmt"
+	"sort"
 	"strings"
 
 	"github.com/second-brain/second-brain/packages/mcp-server/internal/providers"
@@ -76,10 +77,14 @@ func (r *HybridRetriever) AssembleBriefing(
 			if t, ok := m["type"].(string); ok {
 				entry["type"] = t
 			}
+			if s, ok := m["summary"].(string); ok {
+				entry["summary"] = s
+			}
 			if c, ok := m["content"].(string); ok {
-				// Truncate long content for the briefing
-				if len(c) > 200 {
-					entry["content"] = c[:200] + "..."
+				// Truncate long content for the briefing (by runes, so accented
+				// characters aren't cut in half)
+				if runes := []rune(c); len(runes) > 200 {
+					entry["content"] = string(runes[:200]) + "..."
 				} else {
 					entry["content"] = c
 				}
@@ -90,6 +95,11 @@ func (r *HybridRetriever) AssembleBriefing(
 			memories = append(memories, entry)
 		}
 		briefing["memories"] = memories
+
+		// Recurring topics across this person's memories
+		if topics := r.topicCounts(personCtx.Memories); len(topics) > 0 {
+			briefing["topics"] = topics
+		}
 	}
 
 	// Pending tasks
@@ -102,6 +112,9 @@ func (r *HybridRetriever) AssembleBriefing(
 			}
 			if s, ok := t["status"].(string); ok {
 				task["status"] = s
+			}
+			if o, ok := t["owner"].(string); ok {
+				task["owner"] = o
 			}
 			if ca, ok := t["created_at"].(string); ok {
 				task["created_at"] = ca
@@ -124,6 +137,14 @@ func (r *HybridRetriever) AssembleBriefing(
 			}
 			if ca, ok := f["created_at"].(string); ok {
 				entry["created_at"] = ca
+			}
+			if from, ok := f["from"].(string); ok {
+				entry["from"] = from
+			}
+			if id, ok := f["id"].(string); ok {
+				if items := r.feedbackItems(id); len(items) > 0 {
+					entry["items"] = items
+				}
 			}
 			feedbacks = append(feedbacks, entry)
 		}
@@ -218,6 +239,63 @@ func (r *HybridRetriever) buildRecommendation(
 		return "Nenhuma recomendação específica para este contexto."
 	}
 	return strings.Join(parts, " ")
+}
+
+// feedbackItems returns the items (category and content) of a Feedback node
+func (r *HybridRetriever) feedbackItems(feedbackID string) []map[string]interface{} {
+	edges, err := r.graph.GetEdges(feedbackID, "CONTAINS")
+	if err != nil {
+		return nil
+	}
+	items := make([]map[string]interface{}, 0, len(edges))
+	for _, e := range edges {
+		item, err := r.graph.GetNode("FeedbackItem", e.To)
+		if err != nil {
+			continue
+		}
+		items = append(items, map[string]interface{}{
+			"category": item["category"],
+			"content":  item["content"],
+		})
+	}
+	return items
+}
+
+// topicCounts counts how many of the given memories discuss each topic,
+// most frequent first
+func (r *HybridRetriever) topicCounts(memories []map[string]interface{}) []map[string]interface{} {
+	counts := map[string]int{}
+	names := map[string]string{}
+	for _, m := range memories {
+		memID, _ := m["id"].(string)
+		edges, err := r.graph.GetEdges(memID, "DISCUSSES")
+		if err != nil {
+			continue
+		}
+		for _, e := range edges {
+			counts[e.To]++
+			if _, ok := names[e.To]; !ok {
+				if topic, err := r.graph.GetNode("Topic", e.To); err == nil {
+					names[e.To], _ = topic["name"].(string)
+				}
+			}
+		}
+	}
+	ids := make([]string, 0, len(counts))
+	for id := range counts {
+		ids = append(ids, id)
+	}
+	sort.Slice(ids, func(i, j int) bool {
+		if counts[ids[i]] != counts[ids[j]] {
+			return counts[ids[i]] > counts[ids[j]]
+		}
+		return names[ids[i]] < names[ids[j]]
+	})
+	topics := make([]map[string]interface{}, len(ids))
+	for i, id := range ids {
+		topics[i] = map[string]interface{}{"topic": names[id], "mentions": counts[id]}
+	}
+	return topics
 }
 
 // SemanticSearch performs vector similarity search and returns ranked results

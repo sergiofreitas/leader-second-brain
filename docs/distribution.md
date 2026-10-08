@@ -111,7 +111,7 @@ Add MCP config to `opencode.json` as shown above.
 Users copy a profile from `examples/` to `~/.second-brain/config.yaml`:
 
 ```bash
-# Saipos (Toqan + Qulture)
+# Saipos (host extraction + Qulture)
 cp examples/saipos/config.yaml ~/.second-brain/config.yaml
 
 # Startup (hybrid + freeform)

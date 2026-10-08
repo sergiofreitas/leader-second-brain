@@ -55,7 +55,7 @@ claude plugin install /path/to/second-brain/packages/plugins/claude-code
 ## Configuration
 
 See `examples/` in the repository root for config profiles:
-- `saipos/` — Toqan provider, Qulture integration
+- `saipos/` — Host extraction, Qulture integration
 - `startup/` — Hybrid (local + OpenAI)
 - `personal/` — Minimal, all-local, zero API keys
 

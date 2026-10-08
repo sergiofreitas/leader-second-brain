@@ -45,7 +45,13 @@ func newTestServer(t *testing.T) *Server {
 	t.Helper()
 	cfg := &config.Config{Profile: "test", Graph: config.GraphConfig{Engine: "sqlite"}}
 	cfg.Storage.SQLite.Path = t.TempDir() + "/ingest.db"
-	cfg.Feedback.TargetSystem = "markdown"
+	cfg.Feedback = config.FeedbackConfig{
+		Format: "stop_start_continue",
+		Categories: []config.FeedbackCategory{
+			{ID: "stop", Label: "Parar"}, {ID: "start", Label: "Começar"}, {ID: "continue", Label: "Continuar"},
+		},
+		TargetSystem: "markdown",
+	}
 	srv, err := New(cfg)
 	if err != nil {
 		t.Fatalf("new server: %v", err)

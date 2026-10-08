@@ -25,7 +25,7 @@ second-brain/
 │       └── opencode/         OpenCode plugin (opencode.json + .opencode/)
 │
 ├── examples/                Configuration profiles per organization
-│   ├── saipos/              Toqan provider, Qulture integration
+│   ├── saipos/              Host extraction, Qulture integration
 │   ├── startup/             Hybrid (local + OpenAI)
 │   └── personal/            Minimal, all-local, zero API keys
 │
@@ -98,7 +98,7 @@ See `packages/plugins/opencode/README.md`
 
 | Profile | Providers | API Keys | Feedback format | Graph |
 |---------|-----------|----------|-----------------|-------|
-| `saipos` | Toqan + local ST | 0 (proxy) | stop/start/continue → Qulture | SQLite |
+| `saipos` | Host + local ST | 0 | stop/start/continue → Qulture | SQLite |
 | `startup` | Hybrid (local + OpenAI) | 1-2 | freeform → markdown | SQLite |
 | `personal` | All local (Whisper, Ollama, ST) | 0 | freeform → markdown | SQLite |
 
@@ -106,7 +106,8 @@ See `packages/plugins/opencode/README.md`
 
 | Tool | Purpose |
 |------|---------|
-| `ingest` | Capture a memory (text, audio, image, video) — detects type, extracts entities, stores in graph + vector |
+| `ingest` | Store a memory (text, or audio/image/video transcribed or described by the host) with the entities the host extracted — persons, topics, tasks, relationships, feedback items |
+| `list_people` | List known people, so the host reuses their stored names |
 | `recall` | Retrieve context about a person for 1:1, PDI, feedback, or team review |
 | `get_team_context` | Overview of all reports under a leader (recursive hierarchy) |
 | `search_memories` | Search by keyword (FTS5) or semantic similarity (vector) |

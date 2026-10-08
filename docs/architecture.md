@@ -9,13 +9,13 @@ with one SQLite file for all data.
 ## Layers
 
 ```
-MCP Host (Claude Code, Codex, OpenCode, Toqan)
+MCP Host (Claude Code, Codex, OpenCode)
     │
     │ MCP (stdio)
     ▼
 MCP Server (Go binary)
     │
-    ├── Tools: ingest | recall | get_team_context | search_memories
+    ├── Tools: ingest | list_people | recall | get_team_context | search_memories
     │
     ├── Graph Engine: SQLite tables + recursive CTEs
     ├── Vector Search: in-memory cosine similarity (embeddings in SQLite)
@@ -25,7 +25,6 @@ MCP Server (Go binary)
         transcription | ocr | vlm | embedding | llm
         (local: Whisper, Tesseract, Ollama, sentence-transformers)
         (cloud: OpenAI, Anthropic)
-        (proxy: Toqan)
 ```
 
 ## Data flow
@@ -33,11 +32,15 @@ MCP Server (Go binary)
 ### Remember (ingest)
 
 1. Input arrives as text, audio, image, or video
-2. Provider normalizes to text (transcribe / OCR / describe)
-3. LLM extracts entities: persons, topics, tasks, relationships, feedback items
+2. The MCP host normalizes it to text (transcribes / describes) and passes it in `content`
+3. The host extracts entities (persons, topics, tasks, relationships, feedback items),
+   reusing known names from `list_people`; the server validates them and resolves
+   names ignoring case and accents
+   (the server's own LLM provider is only a fallback when the host sends none)
 4. Embedding generated, stored in SQLite and added to the in-memory vector index
 5. Content indexed in FTS5 for keyword search
 6. Graph nodes and edges created in the graph tables (same SQLite file)
+7. Steps 4-6 run in a single transaction: everything is stored or nothing is
 
 ### Recall
 
@@ -71,4 +74,6 @@ type LLMProvider interface { ExtractEntities(text string, cfg) (*Extraction, err
 ```
 
 Configuration in `config.yaml` selects which provider to use for each capability.
-Switching from Toqan to local Ollama is a one-line config change.
+By default the MCP host does transcription, description and entity extraction
+(`host`), so the server needs no AI provider of its own; a server-side provider
+can take over a capability with a one-line config change once it is wired.

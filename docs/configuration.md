@@ -21,11 +21,11 @@ storage:
 
 ```yaml
 providers:
-  transcription: "local:whisper"     # or "toqan" or "cloud:openai"
-  ocr: "local:tesseract"             # or "toqan" or "cloud:google"
-  vlm: "local:ollama"                # or "toqan" or "cloud:openai"
+  transcription: "host"              # or "local:whisper" or "cloud:openai"
+  ocr: "host"                        # or "local:tesseract" or "cloud:google"
+  vlm: "host"                        # or "local:ollama" or "cloud:openai"
   embedding: "local:sentence_transformers"
-  llm: "local:ollama"                # or "toqan" or "cloud:openai"
+  llm: "host"                        # or "local:ollama" or "cloud:openai"
 
   local:
     whisper:
@@ -49,11 +49,13 @@ providers:
     models:
       vlm: "gpt-4o"
       llm: "gpt-4o-mini"
-
-  # Toqan (if used):
-  toqan:
-    endpoint: "${TOQAN_MCP_ENDPOINT}"
 ```
+
+`host` means the MCP host does that step: it transcribes audio, describes
+images and extracts the entities (people, topics, tasks, relationships,
+feedback items) before calling `ingest`, guided by the tool's description.
+This is how the server works today; server-side providers (`local:*`,
+`cloud:*`) are not wired yet, so the server ignores this section for now.
 
 ### feedback
 
@@ -95,6 +97,6 @@ skills:
 ## Example profiles
 
 See `examples/` directory:
-- `saipos/` — Saipos internal (Toqan, Qulture, stop/start/continue)
+- `saipos/` — Saipos internal (host extraction, Qulture, stop/start/continue)
 - `startup/` — Generic startup (hybrid, freeform)
 - `personal/` — Minimal personal (all local, freeform)

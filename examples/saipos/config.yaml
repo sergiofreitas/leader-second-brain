@@ -1,5 +1,6 @@
 # Second Brain — Saipos Configuration
-# Uses Toqan as AI provider (proxy transparent — no API keys needed)
+# The MCP host (e.g. Claude Code) does the understanding: it transcribes or
+# describes media and extracts entities before calling ingest.
 
 profile: saipos
 
@@ -12,15 +13,13 @@ storage:
     retention_days: 365
 
 providers:
-  # Saipos: Toqan handles all AI processing via proxy
-  transcription: "toqan"
-  ocr: "toqan"
-  vlm: "toqan"
+  # Saipos: the host transcribes, describes and extracts; no data leaves
+  # the machine through the server
+  transcription: "host"
+  ocr: "host"
+  vlm: "host"
   embedding: "local:sentence_transformers"
-  llm: "toqan"
-
-  toqan:
-    endpoint: "${TOQAN_MCP_ENDPOINT}"
+  llm: "host"
 
   local:
     sentence_transformers:

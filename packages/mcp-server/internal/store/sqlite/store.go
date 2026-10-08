@@ -3,6 +3,7 @@ package sqlite
 import (
 	"database/sql"
 	"fmt"
+	"strings"
 
 	_ "modernc.org/sqlite"
 )
@@ -218,10 +219,81 @@ func (s *Store) UpsertPerson(id, name, role, area, track string, jobLevel int) e
 	return err
 }
 
+// GetPersonByName returns the ID of the person with the given name, ignoring
+// case, accents and extra spaces. Returns sql.ErrNoRows if there is none.
 func (s *Store) GetPersonByName(name string) (string, error) {
-	var id string
-	err := s.q.QueryRow(`SELECT id FROM persons WHERE name = ?`, name).Scan(&id)
+	id, _, err := s.FindPerson(name)
 	return id, err
+}
+
+// FindPerson returns the ID and stored name of the person matching name.
+// An exact match wins; otherwise names are compared ignoring case, accents
+// and extra spaces ("sergio" finds "Sérgio"). Returns sql.ErrNoRows if none.
+func (s *Store) FindPerson(name string) (id, storedName string, err error) {
+	err = s.q.QueryRow(`SELECT id, name FROM persons WHERE name = ?`, name).Scan(&id, &storedName)
+	if err != sql.ErrNoRows {
+		return id, storedName, err
+	}
+	// A leader's base has tens of people, so a scan is cheap
+	people, err := s.ListPersons()
+	if err != nil {
+		return "", "", err
+	}
+	key := FoldName(name)
+	for _, p := range people {
+		if FoldName(p.Name) == key {
+			return p.ID, p.Name, nil
+		}
+	}
+	return "", "", sql.ErrNoRows
+}
+
+// Person is a row of the persons table
+type Person struct {
+	ID   string `json:"id"`
+	Name string `json:"name"`
+	Role string `json:"role,omitempty"`
+}
+
+// ListPersons returns every person, ordered by name
+func (s *Store) ListPersons() ([]Person, error) {
+	rows, err := s.q.Query(`SELECT id, name, COALESCE(role, '') FROM persons ORDER BY name`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var people []Person
+	for rows.Next() {
+		var p Person
+		if err := rows.Scan(&p.ID, &p.Name, &p.Role); err != nil {
+			return nil, err
+		}
+		people = append(people, p)
+	}
+	return people, rows.Err()
+}
+
+// SetPersonRole updates a person's role
+func (s *Store) SetPersonRole(id, role string) error {
+	_, err := s.q.Exec(`UPDATE persons SET role = ? WHERE id = ?`, role, id)
+	return err
+}
+
+// accentFolder maps accented Latin letters (as used in Portuguese and
+// Spanish names) to their base letter
+var accentFolder = strings.NewReplacer(
+	"á", "a", "à", "a", "â", "a", "ã", "a", "ä", "a",
+	"é", "e", "è", "e", "ê", "e", "ë", "e",
+	"í", "i", "ì", "i", "î", "i", "ï", "i",
+	"ó", "o", "ò", "o", "ô", "o", "õ", "o", "ö", "o",
+	"ú", "u", "ù", "u", "û", "u", "ü", "u",
+	"ç", "c", "ñ", "n",
+)
+
+// FoldName normalizes a name for comparison: lowercase, no accents,
+// single spaces
+func FoldName(name string) string {
+	return accentFolder.Replace(strings.Join(strings.Fields(strings.ToLower(name)), " "))
 }
 
 // ============================================================

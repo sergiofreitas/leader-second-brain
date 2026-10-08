@@ -76,7 +76,16 @@ type EntityExtraction struct {
 	Tasks         []ExtractedTask    `json:"tasks"`
 	Relationships []ExtractedRel     `json:"relationships"`
 	FeedbackItems []ExtractedFeedbackItem `json:"feedback_items,omitempty"`
+	// FeedbackFrom is who gave the feedback, when it was relayed by someone
+	// else (e.g. a report talking about their manager)
+	FeedbackFrom string `json:"feedback_from,omitempty"`
 }
+
+// MemoryTypes are the accepted values of EntityExtraction.MemoryType
+var MemoryTypes = []string{"observation", "feedback", "one_on_one", "assessment", "voice_note"}
+
+// PersonRelationshipTypes are the accepted person-to-person relationship types
+var PersonRelationshipTypes = []string{"REPORTS_TO", "MENTORS", "WORKS_WITH"}
 
 type ExtractedPerson struct {
 	Name string `json:"name"`
@@ -85,13 +94,14 @@ type ExtractedPerson struct {
 
 type ExtractedTask struct {
 	Description string `json:"description"`
-	Owner       string `json:"owner"`
+	Owner       string `json:"owner"`                  // who has to do it (optional)
+	AboutPerson string `json:"about_person,omitempty"` // who it concerns (defaults to the memory's about_person)
 }
 
 type ExtractedRel struct {
-	From string `json:"from"`
-	To   string `json:"to"`
-	Type string `json:"type"` // REPORTS_TO | ABOUT | MENTIONS | MENTORS | etc.
+	From string `json:"from"` // person name
+	To   string `json:"to"`   // person name
+	Type string `json:"type"` // one of PersonRelationshipTypes
 }
 
 // ExtractedFeedbackItem is a single feedback item detected by the LLM.
