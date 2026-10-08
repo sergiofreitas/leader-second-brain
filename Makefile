@@ -1,4 +1,4 @@
-.PHONY: build test clean install-skills install-plugins
+.PHONY: build test clean install-skills install-plugins sync-skills check-skills
 
 BINARY_NAME=second-brain
 MCP_DIR=packages/mcp-server
@@ -25,7 +25,17 @@ test:
 install: build
 	cp $(BINARY_NAME) /usr/local/bin/$(BINARY_NAME)
 	@echo "Installed to /usr/local/bin/$(BINARY_NAME)"
-	@echo "Copy a config: cp examples/saipos/config.yaml ~/.second-brain/config.yaml"
+	@echo "Optionally create a config: second-brain init --help"
+
+# Plugins are copied into the harness on install, so each one carries its own
+# copy of the skills. packages/skills is the source of truth.
+PLUGIN_SKILLS_DIRS=$(PLUGIN_DIR)/claude-code/skills
+
+sync-skills:
+	@for d in $(PLUGIN_SKILLS_DIRS); do rm -rf $$d && mkdir -p $$d && cp -r $(SKILLS_DIR)/* $$d/ && echo "Synced skills into $$d"; done
+
+check-skills:
+	@for d in $(PLUGIN_SKILLS_DIRS); do diff -r $(SKILLS_DIR) $$d || { echo "$$d is out of date: run make sync-skills"; exit 1; }; done
 
 # Copy skills to a target harness skills directory
 install-skills:

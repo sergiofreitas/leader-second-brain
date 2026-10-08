@@ -1,15 +1,17 @@
-# Record an Observation
+---
+description: Record an observation about someone on your team
+argument-hint: "[what you observed]"
+---
 
-Usage: `/observe`
+# Record an observation
 
-Capture a quick observation about a team member.
+Capture what the leader observed, following the `second-brain` skill.
 
-## Instructions
-
-1. Ask the leader what they observed and about whom
-2. Call the `ingest` MCP tool with:
-   - modality: "text" (or "audio" if they provide a recording)
-   - content: the observation text
-   - about_person: the person's name
-3. Confirm what was captured: memory type, persons found, topics, tasks
-4. Ask if they want to record anything else
+1. If the observation isn't in the arguments ($ARGUMENTS), ask what they
+   observed and about whom.
+2. Call `list_people` and reuse the stored names.
+3. Extract the entities (about_person, persons, topics, tasks,
+   relationships, feedback items when it is feedback) and call `ingest`
+   with the leader's words as `content`.
+4. Confirm in one or two lines what was stored, and ask if there is
+   anything else.

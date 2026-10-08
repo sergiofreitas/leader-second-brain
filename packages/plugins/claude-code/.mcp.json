@@ -1,8 +1,7 @@
 {
   "mcpServers": {
     "second-brain": {
-      "command": "${CLAUDE_PLUGIN_ROOT}/bin/second-brain",
-      "args": ["--config", "${CLAUDE_PLUGIN_DATA}/config.yaml"]
+      "command": "second-brain"
     }
   }
 }

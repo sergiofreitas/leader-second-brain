@@ -1,0 +1,15 @@
+{
+  "name": "second-brain",
+  "description": "Second Brain: a local-first memory for leaders, to capture what they observe about their team and recall it when managing people",
+  "owner": {
+    "name": "Sérgio Freitas",
+    "url": "https://github.com/sergiofreitas/leader-second-brain"
+  },
+  "plugins": [
+    {
+      "name": "second-brain",
+      "source": "./packages/plugins/claude-code",
+      "description": "Memory for leadership: capture what you observe about your team and recall it before 1:1s, PDIs and feedback sessions"
+    }
+  ]
+}

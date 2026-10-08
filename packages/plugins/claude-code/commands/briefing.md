@@ -1,17 +1,20 @@
-# Get Briefing for a 1:1
+---
+description: Briefing about a person before a 1:1
+argument-hint: "[person name]"
+---
 
-Usage: `/briefing [person name]`
+# Briefing for a 1:1
 
-Retrieve context from the Second Brain for an upcoming 1:1.
+Prepare the leader for a 1:1 with $ARGUMENTS (ask who, if empty).
 
-## Instructions
-
-1. Call the `recall` MCP tool with the person name and context "1:1"
-2. Present the briefing in a clear, readable format:
-   - Person info and hierarchy
-   - Recent memories (observations, conversations)
-   - Pending tasks
-   - Previous feedbacks
-   - Last PDI assessment (if any)
-   - Recommendation for this 1:1
-3. Ask the leader if they want to add any new observations after the 1:1
+1. Call `recall` with the person's name and context `"1:1"`.
+2. Present a short briefing:
+   - hierarchy (manager, reports)
+   - recent memories, with dates
+   - pending tasks and who owns each
+   - feedbacks given (items and who gave them)
+   - recurring topics, with how often they came up
+   - last PDI assessment, if any
+   - suggested points for this 1:1
+3. Say what is missing rather than filling gaps, and offer to record notes
+   after the 1:1.
