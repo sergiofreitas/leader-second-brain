@@ -2,9 +2,7 @@ package sqlite
 
 import (
 	"database/sql"
-	"encoding/json"
 	"fmt"
-	"time"
 
 	_ "modernc.org/sqlite"
 )
@@ -12,20 +10,27 @@ import (
 // Store manages SQLite for memories, metadata, FTS5, and vector embeddings.
 // CGO-free via modernc.org/sqlite.
 type Store struct {
-	db *sql.DB
+	db      *sql.DB
+	vectors *vectorIndex
 }
 
 // New creates a new SQLite store at the given path
 func New(dbPath string) (*Store, error) {
-	// Use SQLite with WAL mode for better concurrent reads
-	db, err := sql.Open("sqlite", dbPath+"?_pragma=journal_mode(wal)&_pragma=foreign_keys(1)")
+	// WAL for concurrent reads; busy_timeout so concurrent writers wait for
+	// the lock instead of failing with SQLITE_BUSY
+	db, err := sql.Open("sqlite", dbPath+"?_pragma=journal_mode(wal)&_pragma=foreign_keys(1)&_pragma=busy_timeout(5000)")
 	if err != nil {
 		return nil, fmt.Errorf("open sqlite: %w", err)
 	}
 
-	s := &Store{db: db}
+	s := &Store{db: db, vectors: newVectorIndex()}
 	if err := s.initSchema(); err != nil {
+		db.Close()
 		return nil, fmt.Errorf("init schema: %w", err)
+	}
+	if err := s.loadVectors(); err != nil {
+		db.Close()
+		return nil, fmt.Errorf("load vectors: %w", err)
 	}
 
 	return s, nil
@@ -123,6 +128,20 @@ func (s *Store) initSchema() error {
 			INSERT INTO memories_fts(rowid, content, about_person, type)
 			VALUES (new.rowid, new.content, new.about_person, new.type);
 		END`,
+
+		// Memory embeddings — L2-normalized float32 vectors, searched in Go (see vectors.go)
+		`CREATE TABLE IF NOT EXISTS memory_embeddings (
+			memory_id TEXT PRIMARY KEY,
+			dim INTEGER NOT NULL,
+			vector BLOB NOT NULL,
+			FOREIGN KEY (memory_id) REFERENCES memories(id) ON DELETE CASCADE
+		)`,
+
+		// Key-value metadata (used by SetMeta/GetMeta)
+		`CREATE TABLE IF NOT EXISTS metadata (
+			key TEXT PRIMARY KEY,
+			value TEXT NOT NULL
+		)`,
 	}
 
 	for _, stmt := range schema {
@@ -131,26 +150,6 @@ func (s *Store) initSchema() error {
 		}
 	}
 
-	// Try to load sqlite-vec extension (optional — graceful fallback)
-	if err := s.loadVecExtension(); err != nil {
-		// Non-fatal: vector search won't work, but FTS5 and structured queries will
-		fmt.Printf("warning: sqlite-vec not loaded: %v\n", err)
-	}
-
-	return nil
-}
-
-func (s *Store) loadVecExtension() error {
-	// Try loading sqlite-vec extension
-	// The exact loading mechanism depends on the Go SQLite driver used
-	// With modernc.org/sqlite, we may need to use a pure-Go vec implementation
-	// For now, we create the vector table schema and handle loading at query time
-	_, err := s.db.Exec(`CREATE VIRTUAL TABLE IF NOT EXISTS memory_vectors USING vec0(
-		embedding float[384]
-	)`)
-	if err != nil {
-		return err
-	}
 	return nil
 }
 
@@ -281,49 +280,6 @@ func (s *Store) SearchFTS(query string, limit int) ([]map[string]interface{}, er
 }
 
 // ============================================================
-// Vector Search (sqlite-vec)
-// ============================================================
-
-func (s *Store) InsertVector(memoryID string, embedding []float32) error {
-	vecJSON, _ := json.Marshal(embedding)
-	_, err := s.db.Exec(
-		`INSERT OR REPLACE INTO memory_vectors (rowid, embedding) VALUES (?, ?)`,
-		memoryID, string(vecJSON),
-	)
-	return err
-}
-
-func (s *Store) SearchVector(queryVec []float32, limit int) ([]map[string]interface{}, error) {
-	vecJSON, _ := json.Marshal(queryVec)
-	rows, err := s.db.Query(
-		`SELECT v.rowid, v.distance, m.content, m.type, m.about_person, m.created_at
-		 FROM memory_vectors v
-		 JOIN memories m ON m.id = v.rowid
-		 WHERE v.embedding MATCH ?
-		 ORDER BY v.distance
-		 LIMIT ?`,
-		string(vecJSON), limit,
-	)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-
-	var results []map[string]interface{}
-	for rows.Next() {
-		var rowid, distance, content, memType, aboutPerson, createdAt string
-		if err := rows.Scan(&rowid, &distance, &content, &memType, &aboutPerson, &createdAt); err != nil {
-			return nil, err
-		}
-		results = append(results, map[string]interface{}{
-			"memory_id": rowid, "distance": distance, "content": content,
-			"type": memType, "about_person": aboutPerson, "created_at": createdAt,
-		})
-	}
-	return results, nil
-}
-
-// ============================================================
 // Metadata
 // ============================================================
 
@@ -346,7 +302,7 @@ func (s *Store) Close() error {
 }
 
 
-// DB returns the underlying *sql.DB for shared access (e.g., by Graphlite).
+// DB returns the underlying *sql.DB for shared access (e.g., by the graph engine).
 func (s *Store) DB() *sql.DB {
 	return s.db
 }

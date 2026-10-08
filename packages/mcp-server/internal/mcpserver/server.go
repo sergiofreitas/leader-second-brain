@@ -12,7 +12,7 @@ import (
 	"github.com/second-brain/second-brain/packages/mcp-server/internal/retrieve"
 	"github.com/second-brain/second-brain/packages/mcp-server/internal/store/graph"
 	"github.com/second-brain/second-brain/packages/mcp-server/internal/store/sqlite"
-t"github.com/second-brain/second-brain/packages/mcp-server/internal/adapters"
+	"github.com/second-brain/second-brain/packages/mcp-server/internal/adapters"
 )
 
 // Server holds all dependencies for the MCP server
@@ -23,7 +23,7 @@ type Server struct {
 	embedding providers.EmbeddingProvider
 	llm       providers.LLMProvider
 	retriever *retrieve.HybridRetriever
-tadapter   providers.OutputAdapter
+	adapter   providers.OutputAdapter
 }
 
 // New creates a new MCP server with all dependencies wired
@@ -34,11 +34,20 @@ func New(cfg *config.Config) (*Server, error) {
 		return nil, fmt.Errorf("init sqlite store: %w", err)
 	}
 
-	// Initialize graph engine
+	// Initialize graph engine on the same database as the store
 	var graphEngine graph.GraphEngine
-	graphEngine, err = graph.NewGraphliteEngine(cfg.Storage.SQLite.Path)
+	switch cfg.Graph.Engine {
+	case "", "sqlite":
+	case "graphlite":
+		log.Printf("warning: graph engine 'graphlite' was removed; using 'sqlite' (same database file)")
+	default:
+		store.Close()
+		return nil, fmt.Errorf("unknown graph engine %q (supported: sqlite)", cfg.Graph.Engine)
+	}
+	graphEngine, err = graph.NewSQLiteEngine(store.DB())
 	if err != nil {
-		return nil, fmt.Errorf("init graphlite: %w", err)
+		store.Close()
+		return nil, fmt.Errorf("init graph: %w", err)
 	}
 
 	// Providers (stubs for now — replaced by real implementations)

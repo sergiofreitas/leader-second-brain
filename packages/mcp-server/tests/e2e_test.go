@@ -26,7 +26,7 @@ func TestIngestRecallEndToEnd(t *testing.T) {
 		Profile:   "test",
 		Storage:   config.StorageConfig{},
 		Transport: config.TransportConfig{Type: "stdio"},
-		Graph:     config.GraphConfig{Engine: "graphlite"},
+		Graph:     config.GraphConfig{Engine: "sqlite"},
 	}
 	cfg.Storage.SQLite.Path = dbPath
 	cfg.Skills = config.SkillsConfig{

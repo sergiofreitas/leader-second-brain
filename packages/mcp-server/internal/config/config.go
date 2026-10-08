@@ -56,7 +56,7 @@ type TransportConfig struct {
 
 // GraphConfig defines which graph engine to use
 type GraphConfig struct {
-	Engine string `yaml:"engine"` // graphlite (default, Cypher on SQLite)
+	Engine string `yaml:"engine"` // sqlite (default: graph tables + recursive CTEs in the same SQLite file)
 }
 
 // FeedbackConfig defines the feedback format for this organization
@@ -130,7 +130,7 @@ func (c *Config) applyDefaults() {
 	}
 
 	if c.Graph.Engine == "" {
-		c.Graph.Engine = "graphlite"
+		c.Graph.Engine = "sqlite"
 	}
 
 	// Feedback defaults: stop/start/continue
