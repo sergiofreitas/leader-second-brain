@@ -39,7 +39,7 @@ transport:
   type: stdio
 
 graph:
-  engine: graphlite  # graphlite (default, Cypher on SQLite, CGO-free) | sqlite (CTE fallback)
+  engine: sqlite  # graph tables + recursive CTEs in the same SQLite file (CGO-free)
 
 skills:
   second_brain: true

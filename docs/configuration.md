@@ -72,7 +72,7 @@ feedback:
 
 ```yaml
 graph:
-  engine: graphlite    # openCypher on SQLite (default, CGO-free)
+  engine: sqlite       # graph tables + recursive CTEs in the same SQLite file (default, CGO-free)
 ```
 
 ### transport

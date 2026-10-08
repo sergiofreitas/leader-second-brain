@@ -98,9 +98,9 @@ See `packages/plugins/opencode/README.md`
 
 | Profile | Providers | API Keys | Feedback format | Graph |
 |---------|-----------|----------|-----------------|-------|
-| `saipos` | Toqan + local ST | 0 (proxy) | stop/start/continue → Qulture | Graphlite |
-| `startup` | Hybrid (local + OpenAI) | 1-2 | freeform → markdown | Graphlite |
-| `personal` | All local (Whisper, Ollama, ST) | 0 | freeform → markdown | Graphlite |
+| `saipos` | Toqan + local ST | 0 (proxy) | stop/start/continue → Qulture | SQLite |
+| `startup` | Hybrid (local + OpenAI) | 1-2 | freeform → markdown | SQLite |
+| `personal` | All local (Whisper, Ollama, ST) | 0 | freeform → markdown | SQLite |
 
 ## MCP tools
 
@@ -114,8 +114,8 @@ See `packages/plugins/opencode/README.md`
 ## Architecture
 
 - **MCP server**: Go, single binary, `CGO_ENABLED=0` — cross-compiles to Windows, Linux, macOS
-- **Graph engine**: Graphlite (openCypher on SQLite, 235/235 TCK, CGO-free)
-- **Vector search**: sqlite-vec (embeddings in the same SQLite file)
+- **Graph engine**: SQLite tables + recursive CTEs (same database file, CGO-free)
+- **Vector search**: exact cosine similarity in pure Go (embeddings stored in the same SQLite file, no extension needed)
 - **Keyword search**: FTS5 (SQLite native full-text search)
 - **Storage**: One file — `memoria.db` — contains graph, memories, vectors, and FTS index
 - **Provider abstraction**: Pluggable transcription, OCR, VLM, embedding, LLM — local or cloud via config

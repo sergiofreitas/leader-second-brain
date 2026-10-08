@@ -17,8 +17,8 @@ MCP Server (Go binary)
     │
     ├── Tools: ingest | recall | get_team_context | search_memories
     │
-    ├── Graph Engine: Graphlite (openCypher on SQLite)
-    ├── Vector Search: sqlite-vec (embeddings)
+    ├── Graph Engine: SQLite tables + recursive CTEs
+    ├── Vector Search: in-memory cosine similarity (embeddings in SQLite)
     ├── Keyword Search: FTS5 (SQLite native)
     │
     └── Provider Abstraction:
@@ -35,9 +35,9 @@ MCP Server (Go binary)
 1. Input arrives as text, audio, image, or video
 2. Provider normalizes to text (transcribe / OCR / describe)
 3. LLM extracts entities: persons, topics, tasks, relationships, feedback items
-4. Embedding generated and stored in sqlite-vec
+4. Embedding generated, stored in SQLite and added to the in-memory vector index
 5. Content indexed in FTS5 for keyword search
-6. Graph nodes and edges created in Graphlite (same SQLite file)
+6. Graph nodes and edges created in the graph tables (same SQLite file)
 
 ### Recall
 
@@ -51,10 +51,10 @@ MCP Server (Go binary)
 ## Single-file storage
 
 All data lives in one SQLite database file:
-- Graph nodes and edges (Graphlite tables)
+- Graph nodes and edges (graph_nodes, graph_edges tables)
 - Memories and metadata (structured tables)
 - FTS5 index (full-text search virtual table)
-- Vector embeddings (sqlite-vec virtual table)
+- Vector embeddings (memory_embeddings table)
 
 No external databases, no servers, no network calls for storage.
 

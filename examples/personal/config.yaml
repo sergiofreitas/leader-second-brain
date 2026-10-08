@@ -38,7 +38,7 @@ transport:
   type: stdio
 
 graph:
-  engine: graphlite
+  engine: sqlite
 
 feedback:
   format: freeform

@@ -39,7 +39,7 @@ transport:
   type: stdio
 
 graph:
-  engine: graphlite
+  engine: sqlite
 
 skills:
   second_brain: true
