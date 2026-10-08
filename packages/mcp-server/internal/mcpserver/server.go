@@ -2,12 +2,15 @@ package mcpserver
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
 	"fmt"
 	"log"
 	"time"
 
+	"github.com/second-brain/second-brain/packages/mcp-server/internal/chunk"
 	"github.com/second-brain/second-brain/packages/mcp-server/internal/config"
+	"github.com/second-brain/second-brain/packages/mcp-server/internal/indexer"
 	"github.com/second-brain/second-brain/packages/mcp-server/internal/providers"
 	"github.com/second-brain/second-brain/packages/mcp-server/internal/retrieve"
 	"github.com/second-brain/second-brain/packages/mcp-server/internal/store/graph"
@@ -20,10 +23,14 @@ type Server struct {
 	cfg       *config.Config
 	store     *sqlite.Store
 	graph     graph.GraphEngine
-	embedding providers.EmbeddingProvider
+	embedding providers.EmbeddingProvider // nil: semantic search disabled
+	indexer   *indexer.Indexer            // embeds chunks in the background (nil without embedding)
 	llm       providers.LLMProvider
 	retriever *retrieve.HybridRetriever
 	adapter   providers.OutputAdapter
+
+	stopIndexer context.CancelFunc
+	indexerDone chan struct{}
 }
 
 // New creates a new MCP server with all dependencies wired
@@ -50,25 +57,64 @@ func New(cfg *config.Config) (*Server, error) {
 		return nil, fmt.Errorf("init graph: %w", err)
 	}
 
-	// Providers (stubs for now — replaced by real implementations)
-	embedding := &providers.StubEmbedding{}
+	// Memories stored before chunking existed get their chunks now, so they
+	// are indexed like new ones
+	if err := backfillChunks(store); err != nil {
+		store.Close()
+		return nil, fmt.Errorf("backfill chunks: %w", err)
+	}
+
+	// Entity extraction is done by the MCP host; the LLM stub is only a
+	// fallback when the host sends no extraction
 	llm := &providers.StubLLM{}
 
-	// Initialize hybrid retriever
-	retriever := retrieve.NewHybridRetriever(store, graphEngine, embedding)
-
-	// Initialize output adapter (Qulture, Lattice, Markdown, JSON)
-	adapter := adapters.NewAdapter(cfg.Feedback.TargetSystem)
-
-	return &Server{
+	s := &Server{
 		cfg:       cfg,
-		store:      store,
-		graph:      graphEngine,
-		embedding:  embedding,
-		llm:        llm,
-		retriever:  retriever,
-		adapter:   adapter,
-	}, nil
+		store:     store,
+		graph:     graphEngine,
+		llm:       llm,
+		retriever: retrieve.NewHybridRetriever(store, graphEngine, nil),
+		adapter:   adapters.NewAdapter(cfg.Feedback.TargetSystem),
+	}
+	return s, nil
+}
+
+// EnableSemanticSearch uses embedder for semantic search and starts the
+// background indexer that embeds every chunk without a vector for its model
+func (s *Server) EnableSemanticSearch(embedder providers.EmbeddingProvider) error {
+	if s.indexer != nil {
+		return fmt.Errorf("semantic search is already enabled")
+	}
+	ix, err := indexer.New(s.store, embedder, 32)
+	if err != nil {
+		return err
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	s.embedding, s.indexer = embedder, ix
+	s.retriever = retrieve.NewHybridRetriever(s.store, s.graph, embedder)
+	s.stopIndexer, s.indexerDone = cancel, make(chan struct{})
+	go func() {
+		defer close(s.indexerDone)
+		ix.Run(ctx)
+	}()
+	log.Printf("Semantic search: enabled with %s", ix.Model())
+	return nil
+}
+
+// backfillChunks splits the memories that have no chunks yet
+func backfillChunks(store *sqlite.Store) error {
+	memories, err := store.MemoriesWithoutChunks()
+	if err != nil || len(memories) == 0 {
+		return err
+	}
+	return store.InTx(func(_ *sql.Tx, st *sqlite.Store) error {
+		for _, m := range memories {
+			if err := st.InsertChunks(m.ID, chunk.Split(m.Content, nil)); err != nil {
+				return fmt.Errorf("memory %s: %w", m.ID, err)
+			}
+		}
+		return nil
+	})
 }
 
 // ============================================================
@@ -203,6 +249,9 @@ func (s *Server) HandleSearchMemories(ctx context.Context, args map[string]inter
 	var err error
 
 	if semantic {
+		if s.embedding == nil {
+			return nil, fmt.Errorf("semantic search is disabled: no embedding provider is configured (see the embedding section of docs/configuration.md); use keyword search instead")
+		}
 		queryVec, embErr := s.embedding.Embed(query)
 		if embErr != nil {
 			return nil, fmt.Errorf("embed query: %w", embErr)
@@ -229,6 +278,12 @@ func (s *Server) HandleSearchMemories(ctx context.Context, args map[string]inter
 
 // Close shuts down the server and persists data
 func (s *Server) Close() error {
+	// Stop the indexer before the database goes away; a batch in flight
+	// is simply retried on the next start
+	if s.stopIndexer != nil {
+		s.stopIndexer()
+		<-s.indexerDone
+	}
 	if err := s.graph.Close(); err != nil {
 		return err
 	}

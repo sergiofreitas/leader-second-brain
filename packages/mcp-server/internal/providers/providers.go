@@ -47,6 +47,10 @@ type EmbeddingProvider interface {
 	Embed(text string) ([]float32, error)
 	EmbedBatch(texts []string) ([][]float32, error)
 	Dimensions() int
+	// Model identifies the model (and provider) that produced a vector.
+	// Vectors from different models aren't comparable: changing it makes
+	// every chunk be embedded again.
+	Model() string
 }
 
 // LLMProvider does entity extraction, summarization, classification

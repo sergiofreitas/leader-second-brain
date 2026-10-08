@@ -70,6 +70,7 @@ func main() {
 				"content":      in.Content,
 				"file_path":    in.FilePath,
 				"about_person": in.AboutPerson,
+				"segments":     in.Segments,
 				"extraction":   in.extraction(),
 			}
 			result, err := sb.HandleIngest(ctx, argsMap)
@@ -169,12 +170,13 @@ func main() {
 // Fields without omitempty are required in the inferred schema.
 
 type ingestArgs struct {
-	Modality    string `json:"modality" jsonschema:"where the content came from: text, audio, image or video"`
-	Content     string `json:"content" jsonschema:"the text to remember, in the user's own language: the note itself, or your transcription/description of the audio, image or video"`
-	FilePath    string `json:"file_path,omitempty" jsonschema:"path of the original media file, kept as a reference"`
-	AboutPerson string `json:"about_person,omitempty" jsonschema:"the person this memory is mainly about"`
-	MemoryType  string `json:"memory_type,omitempty" jsonschema:"observation, feedback, one_on_one, assessment or voice_note (default: observation)"`
-	Summary     string `json:"summary,omitempty" jsonschema:"one-sentence summary of the memory"`
+	Modality    string   `json:"modality" jsonschema:"where the content came from: text, audio, image or video"`
+	Content     string   `json:"content" jsonschema:"the text to remember, in the user's own language: the note itself, or your transcription/description of the audio, image or video"`
+	FilePath    string   `json:"file_path,omitempty" jsonschema:"path of the original media file, kept as a reference"`
+	AboutPerson string   `json:"about_person,omitempty" jsonschema:"the person this memory is mainly about"`
+	MemoryType  string   `json:"memory_type,omitempty" jsonschema:"observation, feedback, one_on_one, assessment or voice_note (default: observation)"`
+	Summary     string   `json:"summary,omitempty" jsonschema:"one-sentence summary of the memory"`
+	Segments    []string `json:"segments,omitempty" jsonschema:"for long content (transcripts of meetings, long voice notes): the content split into consecutive passages by subject, a few paragraphs each, together covering all of it"`
 
 	Persons       []personArg       `json:"persons,omitempty" jsonschema:"everyone mentioned, with their role when it is stated"`
 	Topics        []string          `json:"topics,omitempty" jsonschema:"short themes, reused across memories so patterns emerge (e.g. microgestão, delegação, autonomia)"`
@@ -251,6 +253,7 @@ func ingestDescription(cfg *config.Config) string {
 		"Store a memory in the leader's second brain: an observation, a conversation, a 1:1, a feedback, a voice note.",
 		"You do the understanding; the server only stores. Pass the text in content, in the user's own language and with its details.",
 		"For audio, image or video, transcribe or describe it yourself and pass that text in content (the server doesn't process media).",
+		"For long content (a meeting transcript, a long voice note), also pass segments: the same text split by subject into consecutive passages of a few paragraphs, so search can find each subject.",
 		"Then extract what the content states, without inventing:",
 		"- about_person: who the memory is mainly about.",
 		"- persons: everyone mentioned (with role when stated). Call list_people first and reuse the stored names for people already known.",

@@ -6,10 +6,10 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"log"
 	"strings"
 	"time"
 
+	"github.com/second-brain/second-brain/packages/mcp-server/internal/chunk"
 	"github.com/second-brain/second-brain/packages/mcp-server/internal/providers"
 	"github.com/second-brain/second-brain/packages/mcp-server/internal/store/graph"
 	"github.com/second-brain/second-brain/packages/mcp-server/internal/store/sqlite"
@@ -24,15 +24,17 @@ var Modalities = []string{"text", "audio", "image", "video"}
 // enter through this single tool. The MCP host (the leader's own assistant)
 // does the understanding: it transcribes or describes media, and passes the
 // text in "content" plus the entities it extracted in "extraction"
-// (*providers.EntityExtraction). Without an extraction, the server falls back
-// to its own LLM provider. The server validates the extraction, resolves
+// (*providers.EntityExtraction) and, for long content, the text split by
+// subject in "segments" ([]string). Without an extraction, the server falls
+// back to its own LLM provider. The server validates the extraction, resolves
 // names against the people it already knows and stores everything in a
-// single transaction.
+// single transaction; chunks are embedded afterwards by the indexer.
 func (s *Server) HandleIngest(ctx context.Context, args map[string]interface{}) (*ToolResult, error) {
 	modality, _ := args["modality"].(string)
 	content, _ := args["content"].(string)
 	filePath, _ := args["file_path"].(string)
 	aboutPersonHint, _ := args["about_person"].(string)
+	segments, _ := args["segments"].([]string)
 	hostExtraction, _ := args["extraction"].(*providers.EntityExtraction)
 
 	// Step 1: The text to store. Media is transcribed/described by the host.
@@ -69,22 +71,20 @@ func (s *Server) HandleIngest(ctx context.Context, args map[string]interface{}) 
 		return nil, err
 	}
 
-	// Step 3: Embedding (outside the transaction: it may call a provider).
-	// A failure only costs semantic search for this memory.
-	embedding, err := s.embedding.Embed(content)
-	if err != nil {
-		log.Printf("warning: could not embed memory: %v", err)
-		embedding = nil
-	}
+	// Step 3: Passages for semantic search — the host's segments (split by
+	// subject) or fixed-size passages. They are embedded later, in the
+	// background, so a long transcript doesn't block this call.
+	chunks := chunk.Split(content, segments)
 
 	memID := generateID("mem")
 	now := time.Now().Format(time.RFC3339)
 	out := newIngestOutcome()
 
-	// Steps 4-9 write the memory, its embedding and its graph in a single
+	// Steps 4-9 write the memory, its chunks and its graph in a single
 	// transaction: either everything is stored or nothing is.
-	err = s.store.InTx(func(tx *sql.Tx, st *sqlite.Store) error {
+	err := s.store.InTx(func(tx *sql.Tx, st *sqlite.Store) error {
 		g := s.graph.WithTx(tx)
+		var err error
 		person := func(name, role string) (string, error) {
 			id, storedName, created, err := ensurePerson(st, g, name, role)
 			if err != nil {
@@ -117,15 +117,12 @@ func (s *Server) HandleIngest(ctx context.Context, args map[string]interface{}) 
 			}
 		}
 
-		// Step 5: The memory, its embedding and its node
+		// Step 5: The memory, its chunks and its node
 		if err := st.InsertMemory(memID, extraction.MemoryType, content, modality, "mcp", filePath, aboutName, 1.0); err != nil {
 			return fmt.Errorf("store memory: %w", err)
 		}
-		if embedding != nil {
-			if err := st.InsertVector(memID, embedding); err != nil {
-				return fmt.Errorf("store vector: %w", err)
-			}
-			out.Embedded = true
+		if err := st.InsertChunks(memID, chunks); err != nil {
+			return fmt.Errorf("store chunks: %w", err)
 		}
 		memProps := map[string]interface{}{
 			"type": extraction.MemoryType, "content": content,
@@ -288,6 +285,13 @@ func (s *Server) HandleIngest(ctx context.Context, args map[string]interface{}) 
 		return nil, fmt.Errorf("ingest: %w", err)
 	}
 
+	// Semantic indexing happens in the background, after the commit
+	semanticIndex := "disabled (no embedding provider configured)"
+	if s.indexer != nil {
+		s.indexer.Notify()
+		semanticIndex = "queued"
+	}
+
 	resultJSON, _ := json.MarshalIndent(map[string]interface{}{
 		"status":         "stored",
 		"memory_id":      memID,
@@ -299,7 +303,8 @@ func (s *Server) HandleIngest(ctx context.Context, args map[string]interface{}) 
 		"relationships":  len(extraction.Relationships),
 		"tasks":          out.Tasks,
 		"feedback_items": out.FeedbackItems,
-		"embedded":       out.Embedded,
+		"chunks":         len(chunks),
+		"semantic_index": semanticIndex,
 	}, "", "  ")
 	return &ToolResult{
 		Content: []ContentBlock{{Type: "text", Text: string(resultJSON)}},
@@ -414,7 +419,6 @@ type ingestOutcome struct {
 	Persons       []personOutcome
 	Tasks         int
 	FeedbackItems int
-	Embedded      bool
 	lastPerson    string // stored name of the last person resolved
 	seen          map[string]int
 }

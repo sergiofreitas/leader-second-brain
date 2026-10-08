@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"strings"
 	"testing"
 
 	"github.com/second-brain/second-brain/packages/mcp-server/internal/config"
@@ -28,18 +29,32 @@ func (f failingGraph) AddEdge(from, to, label string, props map[string]interface
 	return f.GraphEngine.AddEdge(from, to, label, props)
 }
 
-// fixedEmbedding returns the same non-zero vector for any text
-type fixedEmbedding struct{}
+// keywordEmbedding is a fake embedding model with one dimension per keyword
+// stem (plus a small constant one, so no vector is zero): texts about the
+// same subject end up close, like with a real model
+type keywordEmbedding struct{}
 
-func (fixedEmbedding) Embed(string) ([]float32, error) { return []float32{1, 0, 0}, nil }
-func (fixedEmbedding) EmbedBatch(texts []string) ([][]float32, error) {
+var keywordStems = []string{"deleg", "féria", "feedback", "microger"}
+
+func (keywordEmbedding) Embed(text string) ([]float32, error) {
+	text = strings.ToLower(text)
+	vec := make([]float32, len(keywordStems)+1)
+	for i, stem := range keywordStems {
+		vec[i] = float32(strings.Count(text, stem))
+	}
+	vec[len(keywordStems)] = 0.1
+	return vec, nil
+}
+
+func (k keywordEmbedding) EmbedBatch(texts []string) ([][]float32, error) {
 	out := make([][]float32, len(texts))
-	for i := range texts {
-		out[i] = []float32{1, 0, 0}
+	for i, t := range texts {
+		out[i], _ = k.Embed(t)
 	}
 	return out, nil
 }
-func (fixedEmbedding) Dimensions() int { return 3 }
+func (keywordEmbedding) Dimensions() int { return len(keywordStems) + 1 }
+func (keywordEmbedding) Model() string   { return "test-keywords" }
 
 func newTestServer(t *testing.T) *Server {
 	t.Helper()
@@ -57,8 +72,19 @@ func newTestServer(t *testing.T) *Server {
 		t.Fatalf("new server: %v", err)
 	}
 	t.Cleanup(func() { srv.Close() })
-	srv.embedding = fixedEmbedding{}
+	if err := srv.EnableSemanticSearch(keywordEmbedding{}); err != nil {
+		t.Fatalf("enable semantic search: %v", err)
+	}
 	return srv
+}
+
+// indexNow embeds every pending chunk, without waiting for the background
+// indexer
+func indexNow(t *testing.T, srv *Server) {
+	t.Helper()
+	if _, err := srv.indexer.RunOnce(context.Background()); err != nil {
+		t.Fatalf("index: %v", err)
+	}
 }
 
 // TestIngestIsAtomic checks that a failure in the last graph write of an
@@ -83,12 +109,12 @@ func TestIngestIsAtomic(t *testing.T) {
 	if results, err := srv.store.SearchFTS("microgerenciando", 10); err != nil || len(results) != 0 {
 		t.Errorf("FTS after failed ingest = %v (err %v), want no memories", results, err)
 	}
-	if results, _ := srv.store.SearchVector([]float32{1, 0, 0}, 10); len(results) != 0 {
-		t.Errorf("vector search after failed ingest = %v, want nothing", results)
-	}
-	var nodes int
+	var nodes, chunks int
 	if err := srv.store.DB().QueryRow(`SELECT count(*) FROM graph_nodes`).Scan(&nodes); err != nil || nodes != 0 {
 		t.Errorf("graph nodes after failed ingest = %d (err %v), want 0", nodes, err)
+	}
+	if err := srv.store.DB().QueryRow(`SELECT count(*) FROM memory_chunks`).Scan(&chunks); err != nil || chunks != 0 {
+		t.Errorf("chunks after failed ingest = %d (err %v), want 0", chunks, err)
 	}
 
 	// The same ingest succeeds once the failure is gone, and stores everything
@@ -104,7 +130,8 @@ func TestIngestIsAtomic(t *testing.T) {
 	if err != nil || len(pc.Memories) != 1 {
 		t.Errorf("person context after ingest = %+v (err %v), want 1 memory", pc, err)
 	}
-	if results, _ := srv.store.SearchVector([]float32{1, 0, 0}, 10); len(results) != 1 {
+	indexNow(t, srv)
+	if results, _ := srv.store.SearchVector([]float32{0, 0, 0, 1, 0}, 10); len(results) != 1 {
 		t.Errorf("vector search after ingest = %v, want 1 memory", results)
 	}
 }

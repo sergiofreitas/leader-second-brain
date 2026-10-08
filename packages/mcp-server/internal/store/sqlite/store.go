@@ -48,11 +48,8 @@ func New(dbPath string) (*Store, error) {
 		db.Close()
 		return nil, fmt.Errorf("init schema: %w", err)
 	}
-	if err := s.loadVectors(); err != nil {
-		db.Close()
-		return nil, fmt.Errorf("load vectors: %w", err)
-	}
-
+	// The vector index is loaded by UseEmbeddingModel, once the embedding
+	// model is known
 	return s, nil
 }
 
@@ -149,12 +146,39 @@ func (s *Store) initSchema() error {
 			VALUES (new.rowid, new.content, new.about_person, new.type);
 		END`,
 
-		// Memory embeddings — L2-normalized float32 vectors, searched in Go (see vectors.go)
-		`CREATE TABLE IF NOT EXISTS memory_embeddings (
-			memory_id TEXT PRIMARY KEY,
+		// Replaced by chunk_embeddings. No release ever stored rows in it: the
+		// only embedding provider was a stub whose zero vectors were skipped.
+		`DROP TABLE IF EXISTS memory_embeddings`,
+
+		// Memory chunks — the passages that get embedded (see chunks.go)
+		`CREATE TABLE IF NOT EXISTS memory_chunks (
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			memory_id TEXT NOT NULL,
+			seq INTEGER NOT NULL,
+			content TEXT NOT NULL,
+			UNIQUE (memory_id, seq),
+			FOREIGN KEY (memory_id) REFERENCES memories(id) ON DELETE CASCADE
+		)`,
+
+		// Chunk embeddings — L2-normalized float32 vectors per model, searched in Go
+		`CREATE TABLE IF NOT EXISTS chunk_embeddings (
+			chunk_id INTEGER NOT NULL,
+			model TEXT NOT NULL,
 			dim INTEGER NOT NULL,
 			vector BLOB NOT NULL,
-			FOREIGN KEY (memory_id) REFERENCES memories(id) ON DELETE CASCADE
+			PRIMARY KEY (chunk_id, model),
+			FOREIGN KEY (chunk_id) REFERENCES memory_chunks(id) ON DELETE CASCADE
+		)`,
+
+		// Failed embedding attempts, for backoff and giving up
+		`CREATE TABLE IF NOT EXISTS embedding_failures (
+			chunk_id INTEGER NOT NULL,
+			model TEXT NOT NULL,
+			attempts INTEGER NOT NULL,
+			next_attempt_at INTEGER NOT NULL,
+			last_error TEXT,
+			PRIMARY KEY (chunk_id, model),
+			FOREIGN KEY (chunk_id) REFERENCES memory_chunks(id) ON DELETE CASCADE
 		)`,
 
 		// Key-value metadata (used by SetMeta/GetMeta)

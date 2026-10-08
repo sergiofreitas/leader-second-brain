@@ -5,19 +5,21 @@ import (
 	"encoding/binary"
 	"fmt"
 	"math"
-	"strings"
 	"sync"
 )
 
 // Vector search in pure Go.
 //
-// Embeddings are stored L2-normalized as little-endian float32 BLOBs in
-// memory_embeddings and mirrored in an in-memory index loaded at startup.
-// Search is an exact (brute-force) cosine similarity scan: at the volume of a
-// single leader's knowledge base (tens of thousands of chunks) this answers in
-// milliseconds, needs no SQLite extension and keeps the build CGO-free.
+// Memories are split into chunks (memory_chunks). Each chunk's embedding is
+// stored L2-normalized as a little-endian float32 BLOB in chunk_embeddings,
+// keyed by chunk and model, and the current model's vectors are mirrored in an
+// in-memory index. Search is an exact (brute-force) cosine similarity scan: at
+// the volume of a single leader's knowledge base (tens of thousands of
+// chunks) this answers in milliseconds, needs no SQLite extension and keeps
+// the build CGO-free.
 
-// vectorIndex is the in-memory mirror of memory_embeddings
+// vectorIndex is the in-memory mirror of the current model's chunk_embeddings,
+// keyed by chunk id
 type vectorIndex struct {
 	mu   sync.RWMutex
 	ids  []string
@@ -53,6 +55,12 @@ func (ix *vectorIndex) remove(id string) {
 	ix.pos[ix.ids[i]] = i
 	ix.ids, ix.vecs = ix.ids[:last], ix.vecs[:last]
 	delete(ix.pos, id)
+}
+
+func (ix *vectorIndex) reset() {
+	ix.mu.Lock()
+	defer ix.mu.Unlock()
+	ix.ids, ix.vecs, ix.pos = nil, nil, map[string]int{}
 }
 
 func (ix *vectorIndex) len() int {
@@ -150,122 +158,4 @@ func decodeVector(buf []byte) ([]float32, error) {
 		vec[i] = math.Float32frombits(binary.LittleEndian.Uint32(buf[4*i:]))
 	}
 	return vec, nil
-}
-
-// loadVectors fills the in-memory index from memory_embeddings
-func (s *Store) loadVectors() error {
-	rows, err := s.q.Query(`SELECT memory_id, vector FROM memory_embeddings`)
-	if err != nil {
-		return err
-	}
-	defer rows.Close()
-	for rows.Next() {
-		var id string
-		var blob []byte
-		if err := rows.Scan(&id, &blob); err != nil {
-			return err
-		}
-		vec, err := decodeVector(blob)
-		if err != nil {
-			return fmt.Errorf("memory %s: %w", id, err)
-		}
-		s.vectors.put(id, vec)
-	}
-	return rows.Err()
-}
-
-// InsertVector stores the embedding of a memory, replacing any previous one.
-// Zero vectors are ignored, since they can't be ranked by similarity.
-func (s *Store) InsertVector(memoryID string, embedding []float32) error {
-	vec := normalize(embedding)
-	if vec == nil {
-		return nil
-	}
-	if _, err := s.q.Exec(
-		`INSERT OR REPLACE INTO memory_embeddings (memory_id, dim, vector) VALUES (?, ?, ?)`,
-		memoryID, len(vec), encodeVector(vec),
-	); err != nil {
-		return err
-	}
-	s.updateIndex(memoryID, vec)
-	return nil
-}
-
-// DeleteVector removes the embedding of a memory
-func (s *Store) DeleteVector(memoryID string) error {
-	if _, err := s.q.Exec(`DELETE FROM memory_embeddings WHERE memory_id = ?`, memoryID); err != nil {
-		return err
-	}
-	s.updateIndex(memoryID, nil)
-	return nil
-}
-
-// updateIndex puts vec in the in-memory index (or removes the entry when vec
-// is nil). Inside a transaction the change is deferred until commit.
-func (s *Store) updateIndex(memoryID string, vec []float32) {
-	if s.inTx() {
-		*s.pendingVectors = append(*s.pendingVectors, pendingVector{memoryID, vec})
-		return
-	}
-	if vec == nil {
-		s.vectors.remove(memoryID)
-	} else {
-		s.vectors.put(memoryID, vec)
-	}
-}
-
-// SearchVector returns the memories most similar to queryVec, best first.
-// "similarity" is the cosine similarity and "distance" is 1 - similarity.
-func (s *Store) SearchVector(queryVec []float32, limit int) ([]map[string]interface{}, error) {
-	query := normalize(queryVec)
-	if query == nil || limit <= 0 {
-		return nil, nil
-	}
-	hits := s.vectors.search(query, limit)
-	if len(hits) == 0 {
-		return nil, nil
-	}
-
-	placeholders := make([]string, len(hits))
-	args := make([]interface{}, len(hits))
-	for i, h := range hits {
-		placeholders[i] = "?"
-		args[i] = h.id
-	}
-	rows, err := s.q.Query(
-		`SELECT id, content, type, COALESCE(about_person, ''), created_at
-		 FROM memories WHERE id IN (`+strings.Join(placeholders, ", ")+`)`,
-		args...,
-	)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-
-	memories := make(map[string]map[string]interface{}, len(hits))
-	for rows.Next() {
-		var id, content, memType, aboutPerson, createdAt string
-		if err := rows.Scan(&id, &content, &memType, &aboutPerson, &createdAt); err != nil {
-			return nil, err
-		}
-		memories[id] = map[string]interface{}{
-			"memory_id": id, "content": content, "type": memType,
-			"about_person": aboutPerson, "created_at": createdAt,
-		}
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-
-	results := make([]map[string]interface{}, 0, len(hits))
-	for _, h := range hits {
-		m, ok := memories[h.id]
-		if !ok {
-			continue // memory deleted after the index was loaded
-		}
-		m["similarity"] = float64(h.score)
-		m["distance"] = 1 - float64(h.score)
-		results = append(results, m)
-	}
-	return results, nil
 }

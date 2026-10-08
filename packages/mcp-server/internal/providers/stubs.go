@@ -28,6 +28,8 @@ func (s *StubEmbedding) EmbedBatch(texts []string) ([][]float32, error) {
 	return result, nil
 }
 
+func (s *StubEmbedding) Model() string { return "stub" }
+
 func (s *StubEmbedding) Dimensions() int {
 	if s.Dim == 0 {
 		return 384

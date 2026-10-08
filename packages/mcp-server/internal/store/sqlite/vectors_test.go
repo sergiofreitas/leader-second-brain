@@ -6,27 +6,56 @@ import (
 	"testing"
 )
 
+// addMemory stores a memory with the given chunks and returns the chunk ids
+func addMemory(t *testing.T, s *Store, id string, chunks ...string) []int64 {
+	t.Helper()
+	if err := s.InsertMemory(id, "observation", "content "+id, "text", "test", "", "Ana", 1); err != nil {
+		t.Fatalf("insert memory: %v", err)
+	}
+	if err := s.InsertChunks(id, chunks); err != nil {
+		t.Fatalf("insert chunks: %v", err)
+	}
+	rows, err := s.DB().Query(`SELECT id FROM memory_chunks WHERE memory_id = ? ORDER BY seq`, id)
+	if err != nil {
+		t.Fatalf("chunk ids: %v", err)
+	}
+	defer rows.Close()
+	var ids []int64
+	for rows.Next() {
+		var cid int64
+		rows.Scan(&cid)
+		ids = append(ids, cid)
+	}
+	return ids
+}
+
+func memoryIDs(results []map[string]interface{}) string {
+	var ids []string
+	for _, r := range results {
+		ids = append(ids, r["memory_id"].(string))
+	}
+	return fmt.Sprint(ids)
+}
+
 func TestVectorSearch(t *testing.T) {
 	dbPath := t.TempDir() + "/vectors.db"
 	s, err := New(dbPath)
 	if err != nil {
 		t.Fatalf("open: %v", err)
 	}
-
-	memories := map[string][]float32{
-		"m_close":  {1, 0.1, 0},
-		"m_middle": {1, 1, 0},
-		"m_far":    {-1, 0, 0},
-		"m_zero":   {0, 0, 0},
-		"m_old":    {1, 0}, // different dimension (previous embedding model)
+	if err := s.UseEmbeddingModel("m1"); err != nil {
+		t.Fatalf("use model: %v", err)
 	}
-	for id, vec := range memories {
-		if err := s.InsertMemory(id, "observation", "content "+id, "text", "test", "", "Ana", 1); err != nil {
-			t.Fatalf("insert memory: %v", err)
-		}
-		if err := s.InsertVector(id, vec); err != nil {
-			t.Fatalf("insert vector %s: %v", id, err)
-		}
+
+	// m_long has two chunks: one close to the query, one far from it
+	long := addMemory(t, s, "m_long", "pauta da 1:1", "microgestão do time")
+	middle := addMemory(t, s, "m_middle", "feedback construtivo")
+	far := addMemory(t, s, "m_far", "férias")
+	zero := addMemory(t, s, "m_zero", "vazio")
+	ids := []int64{long[0], long[1], middle[0], far[0], zero[0]}
+	vectors := [][]float32{{0, 1, 0}, {1, 0.1, 0}, {1, 1, 0}, {-1, 0, 0}, {0, 0, 0}}
+	if err := s.SaveEmbeddings("m1", ids, vectors); err != nil {
+		t.Fatalf("save embeddings: %v", err)
 	}
 
 	check := func(s *Store, label string) {
@@ -35,60 +64,51 @@ func TestVectorSearch(t *testing.T) {
 		if err != nil {
 			t.Fatalf("%s: search: %v", label, err)
 		}
-		var got []string
-		for _, r := range results {
-			got = append(got, r["memory_id"].(string))
+		// One result per memory, ranked by its best chunk; the zero vector
+		// was never stored
+		if got := memoryIDs(results); got != "[m_long m_middle m_far]" {
+			t.Fatalf("%s: results = %s", label, got)
 		}
-		want := []string{"m_close", "m_middle", "m_far"}
-		if fmt.Sprint(got) != fmt.Sprint(want) {
-			t.Fatalf("%s: results = %v, want %v", label, got, want)
+		if results[0]["excerpt"] != "microgestão do time" || results[0]["about_person"] != "Ana" {
+			t.Errorf("%s: best result = %v, want the matching chunk as excerpt", label, results[0])
 		}
 		if sim := results[0]["similarity"].(float64); sim < 0.99 || sim > 1.0001 {
-			t.Errorf("%s: similarity of closest = %v, want ~0.995", label, sim)
-		}
-		if results[0]["content"] != "content m_close" || results[0]["about_person"] != "Ana" {
-			t.Errorf("%s: memory fields = %v", label, results[0])
+			t.Errorf("%s: similarity = %v, want ~0.995", label, sim)
 		}
 	}
 	check(s, "fresh")
-
-	// Limit keeps only the best matches
-	if results, _ := s.SearchVector([]float32{1, 0, 0}, 1); len(results) != 1 || results[0]["memory_id"] != "m_close" {
-		t.Errorf("limit 1 = %v, want only m_close", results)
+	if results, _ := s.SearchVector([]float32{1, 0, 0}, 1); memoryIDs(results) != "[m_long]" {
+		t.Errorf("limit 1 = %s", memoryIDs(results))
 	}
-	// A zero query vector has no direction to compare
 	if results, _ := s.SearchVector([]float32{0, 0, 0}, 5); len(results) != 0 {
 		t.Errorf("zero query = %v, want no results", results)
 	}
 
-	// Replacing a vector moves the memory in the ranking
-	if err := s.InsertVector("m_far", []float32{1, 0, 0}); err != nil {
-		t.Fatalf("replace vector: %v", err)
-	}
-	if results, _ := s.SearchVector([]float32{1, 0, 0}, 1); results[0]["memory_id"] != "m_far" {
-		t.Errorf("after replace, best = %v, want m_far", results[0]["memory_id"])
-	}
-	if err := s.InsertVector("m_far", []float32{-1, 0, 0}); err != nil {
-		t.Fatalf("restore vector: %v", err)
-	}
-
-	// Vectors persist and are reloaded when the store is reopened
-	if err := s.Close(); err != nil {
-		t.Fatalf("close: %v", err)
-	}
-	s, err = New(dbPath)
-	if err != nil {
+	// Vectors persist and are reloaded for the same model
+	s.Close()
+	if s, err = New(dbPath); err != nil {
 		t.Fatalf("reopen: %v", err)
 	}
 	defer s.Close()
+	if results, _ := s.SearchVector([]float32{1, 0, 0}, 5); len(results) != 0 {
+		t.Errorf("search before UseEmbeddingModel = %v, want nothing loaded", results)
+	}
+	if err := s.UseEmbeddingModel("m1"); err != nil {
+		t.Fatalf("use model: %v", err)
+	}
 	check(s, "reopened")
 
-	// Deleted vectors leave the index
-	if err := s.DeleteVector("m_close"); err != nil {
-		t.Fatalf("delete vector: %v", err)
+	// Another model drops m1's vectors: every chunk is pending again
+	if err := s.UseEmbeddingModel("m2"); err != nil {
+		t.Fatalf("switch model: %v", err)
 	}
-	if results, _ := s.SearchVector([]float32{1, 0, 0}, 1); results[0]["memory_id"] != "m_middle" {
-		t.Errorf("after delete, best = %v, want m_middle", results[0]["memory_id"])
+	if results, _ := s.SearchVector([]float32{1, 0, 0}, 5); len(results) != 0 {
+		t.Errorf("search after switching model = %s, want nothing", memoryIDs(results))
+	}
+	var left int
+	s.DB().QueryRow(`SELECT count(*) FROM chunk_embeddings`).Scan(&left)
+	if left != 0 {
+		t.Errorf("%d embeddings of the old model left", left)
 	}
 }
 
@@ -103,7 +123,7 @@ func BenchmarkVectorSearch(b *testing.B) {
 		for j := range vec {
 			vec[j] = rng.Float32()*2 - 1
 		}
-		ix.put(fmt.Sprintf("m%d", i), normalize(vec))
+		ix.put(fmt.Sprintf("%d", i), normalize(vec))
 	}
 	query := make([]float32, dim)
 	for j := range query {
@@ -113,6 +133,6 @@ func BenchmarkVectorSearch(b *testing.B) {
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		ix.search(query, 10)
+		ix.search(query, 40)
 	}
 }
