@@ -100,26 +100,13 @@ func (r *HybridRetriever) AssembleBriefing(
 		}
 	}
 
-	// Pending tasks
+	// Pending tasks, with their id (for complete_task), and the ones
+	// completed in the time range
 	if len(pendingTasks) > 0 {
-		tasks := make([]map[string]interface{}, 0, len(pendingTasks))
-		for _, t := range pendingTasks {
-			task := map[string]interface{}{}
-			if d, ok := t["description"].(string); ok {
-				task["description"] = d
-			}
-			if s, ok := t["status"].(string); ok {
-				task["status"] = s
-			}
-			if o, ok := t["owner"].(string); ok {
-				task["owner"] = o
-			}
-			if ca, ok := t["created_at"].(string); ok {
-				task["created_at"] = ca
-			}
-			tasks = append(tasks, task)
-		}
-		briefing["pending_tasks"] = tasks
+		briefing["pending_tasks"] = TaskEntries(pendingTasks)
+	}
+	if personCtx != nil && len(personCtx.DoneTasks) > 0 {
+		briefing["completed_tasks"] = TaskEntries(personCtx.DoneTasks)
 	}
 
 	// Feedbacks from graph
@@ -233,6 +220,22 @@ func (r *HybridRetriever) buildRecommendation(
 		return "Nenhuma recomendação específica para este contexto."
 	}
 	return strings.Join(parts, " ")
+}
+
+// TaskEntries returns tasks as listed to the host: id (for complete_task),
+// description, status, owner and dates
+func TaskEntries(tasks []map[string]interface{}) []map[string]interface{} {
+	entries := make([]map[string]interface{}, 0, len(tasks))
+	for _, t := range tasks {
+		entry := map[string]interface{}{}
+		for _, key := range []string{"id", "description", "status", "owner", "created_at", "completed_at"} {
+			if v, ok := t[key].(string); ok && v != "" {
+				entry[key] = v
+			}
+		}
+		entries = append(entries, entry)
+	}
+	return entries
 }
 
 // copyDates copies when something happened (occurred_at, when it was stored

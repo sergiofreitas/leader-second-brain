@@ -36,10 +36,11 @@ func parseOccurredAt(s string, today time.Time) (string, error) {
 	return day, nil
 }
 
-// whenOf returns when what a node or search hit records happened: its
-// occurred_at, else its created_at. ok is false when neither parses.
+// whenOf returns when what a node or search hit records happened: when a
+// task was completed, when a memory occurred, else when it was created.
+// ok is false when none parses.
 func whenOf(m map[string]interface{}) (t time.Time, ok bool) {
-	for _, key := range []string{"occurred_at", "created_at"} {
+	for _, key := range []string{"completed_at", "occurred_at", "created_at"} {
 		s, _ := m[key].(string)
 		if s == "" {
 			continue

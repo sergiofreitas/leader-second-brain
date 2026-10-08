@@ -73,7 +73,9 @@ type PersonContext struct {
 	Managers    []map[string]interface{} `json:"managers"`
 	Reports     []map[string]interface{} `json:"reports"`
 	Memories    []map[string]interface{} `json:"memories"`
-	Tasks       []map[string]interface{} `json:"tasks"`
+	Tasks       []map[string]interface{} `json:"tasks"`       // pending, concerning the person
+	DoneTasks   []map[string]interface{} `json:"done_tasks"`  // completed, concerning the person
+	OwnedTasks  []map[string]interface{} `json:"owned_tasks"` // pending, that the person has to do
 	Feedbacks   []map[string]interface{} `json:"feedbacks"`
 	Assessments []map[string]interface{} `json:"assessments"`
 	Skills      []map[string]interface{} `json:"skills"`

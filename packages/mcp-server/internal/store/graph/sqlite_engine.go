@@ -313,6 +313,8 @@ func (g *SQLiteEngine) GetPersonContext(personID string) (*PersonContext, error)
 		{&ctx.Reports, "REPORTS_TO", "Person", false, "", ""},
 		{&ctx.Memories, "ABOUT", "Memory", false, "", newestFirst},
 		{&ctx.Tasks, "TARGETS", "Task", false, "json_extract(n.props, '$.status') = 'pending'", newestFirst},
+		{&ctx.DoneTasks, "TARGETS", "Task", false, "json_extract(n.props, '$.status') = 'done'", "json_extract(n.props, '$.completed_at') DESC"},
+		{&ctx.OwnedTasks, "OWNED_BY", "Task", false, "json_extract(n.props, '$.status') = 'pending'", newestFirst},
 		{&ctx.Feedbacks, "ABOUT", "Feedback", false, "", newestFirst},
 		{&ctx.Assessments, "ASSESSED", "Assessment", false, "", "json_extract(n.props, '$.date') DESC"},
 		{&ctx.Skills, "HAS_STRENGTH", "Skill", true, "", ""},

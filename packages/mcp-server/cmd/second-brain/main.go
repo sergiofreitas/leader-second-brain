@@ -148,6 +148,21 @@ func serve(args []string) {
 		},
 	)
 
+	// --- complete_task ---
+	mcp.AddTool(server,
+		&mcp.Tool{
+			Name:        "complete_task",
+			Description: "Mark a task as done, when the user says it was done (e.g. \"já fiz a avaliação do Evandro\"). Task ids are in the pending_tasks of recall and get_team_context. Done tasks leave the pending list and appear under completed_tasks in recall.",
+		},
+		func(ctx context.Context, req *mcp.CallToolRequest, in completeTaskArgs) (*mcp.CallToolResult, any, error) {
+			result, err := sb.HandleCompleteTask(ctx, map[string]interface{}{"task_id": in.TaskID})
+			if err != nil {
+				return nil, nil, err
+			}
+			return toCallToolResult(result), nil, nil
+		},
+	)
+
 	// --- recall ---
 	mcp.AddTool(server,
 		&mcp.Tool{
@@ -334,6 +349,10 @@ type teamArgs struct {
 type renameArgs struct {
 	Name    string `json:"name" jsonschema:"the person's current name, as stored (see list_people)"`
 	NewName string `json:"new_name" jsonschema:"the new name, e.g. the full name"`
+}
+
+type completeTaskArgs struct {
+	TaskID string `json:"task_id" jsonschema:"the task's id, from pending_tasks in recall or get_team_context"`
 }
 
 type searchArgs struct {

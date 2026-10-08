@@ -192,6 +192,7 @@ func (s *Server) HandleRecall(ctx context.Context, args map[string]interface{}) 
 	// listed whatever their age: they are still open.
 	personCtx.Memories = since(personCtx.Memories, start)
 	personCtx.Feedbacks = since(personCtx.Feedbacks, start)
+	personCtx.DoneTasks = since(personCtx.DoneTasks, start) // by when completed
 	tasks := personCtx.Tasks
 
 	// Search for related memories via FTS5

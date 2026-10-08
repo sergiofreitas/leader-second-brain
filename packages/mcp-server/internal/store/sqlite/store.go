@@ -402,6 +402,19 @@ func (s *Store) InsertTask(id, description, owner, status string) error {
 	return err
 }
 
+// CompleteTask marks a task done and returns the status it had: "done"
+// means it already was, and nothing changed. sql.ErrNoRows: no such task.
+func (s *Store) CompleteTask(id string) (previous string, err error) {
+	if err := s.q.QueryRow(`SELECT status FROM tasks WHERE id = ?`, id).Scan(&previous); err != nil {
+		return "", err
+	}
+	if previous == "done" {
+		return previous, nil
+	}
+	_, err = s.q.Exec(`UPDATE tasks SET status = 'done', completed_at = datetime('now') WHERE id = ?`, id)
+	return previous, err
+}
+
 func (s *Store) GetPendingTasks(personID string) ([]map[string]interface{}, error) {
 	rows, err := s.q.Query(
 		`SELECT id, description, owner, status, created_at FROM tasks
