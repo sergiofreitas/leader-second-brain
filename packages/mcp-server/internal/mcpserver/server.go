@@ -235,18 +235,25 @@ func (s *Server) HandleGetTeamContext(ctx context.Context, args map[string]inter
 		return lookupMiss(err)
 	}
 
-	// Get team hierarchy from graph
-	team, err := s.graph.GetTeamHierarchy(leaderID)
+	// Everyone under the leader, with their context
+	hierarchy, err := s.graph.GetTeamHierarchy(leaderID)
 	if err != nil {
 		return nil, fmt.Errorf("get team hierarchy: %w", err)
 	}
-
-	result := map[string]interface{}{
-		"leader":    leaderName,
-		"team_size": len(team),
-		"members":   team,
+	members := make([]retrieve.Member, 0, len(hierarchy))
+	for _, node := range hierarchy {
+		personCtx, err := s.graph.GetPersonContext(node.ID)
+		if err != nil {
+			return nil, fmt.Errorf("context of %s: %w", node.Name, err)
+		}
+		members = append(members, retrieve.Member{Node: node, Context: personCtx})
+	}
+	leaderCtx, err := s.graph.GetPersonContext(leaderID)
+	if err != nil {
+		return nil, fmt.Errorf("context of %s: %w", leaderName, err)
 	}
 
+	result := s.retriever.AssembleTeam(leaderName, leaderCtx, members, time.Now())
 	resultJSON, _ := json.MarshalIndent(result, "", "  ")
 	return &ToolResult{
 		Content: []ContentBlock{{Type: "text", Text: string(resultJSON)}},

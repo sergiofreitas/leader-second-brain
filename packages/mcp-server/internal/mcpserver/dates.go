@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"strings"
 	"time"
+
+	"github.com/second-brain/second-brain/packages/mcp-server/internal/retrieve"
 )
 
 // dateLayout is how dates a memory is about are stored (occurred_at)
@@ -36,25 +38,6 @@ func parseOccurredAt(s string, today time.Time) (string, error) {
 	return day, nil
 }
 
-// whenOf returns when what a node or search hit records happened: when a
-// task was completed, when a memory occurred, else when it was created.
-// ok is false when none parses.
-func whenOf(m map[string]interface{}) (t time.Time, ok bool) {
-	for _, key := range []string{"completed_at", "occurred_at", "created_at"} {
-		s, _ := m[key].(string)
-		if s == "" {
-			continue
-		}
-		// graph props are RFC 3339, the memories table uses SQLite's format
-		for _, layout := range []string{time.RFC3339, "2006-01-02 15:04:05", dateLayout} {
-			if t, err := time.Parse(layout, s); err == nil {
-				return t, true
-			}
-		}
-	}
-	return time.Time{}, false
-}
-
 // rangeStart returns the earliest moment a time range covers, or the zero
 // time for "all"
 func rangeStart(timeRange string, now time.Time) (time.Time, error) {
@@ -79,7 +62,7 @@ func since(items []map[string]interface{}, start time.Time) []map[string]interfa
 	}
 	kept := items[:0:0]
 	for _, item := range items {
-		if t, ok := whenOf(item); !ok || !t.Before(start) {
+		if t, ok := retrieve.WhenOf(item); !ok || !t.Before(start) {
 			kept = append(kept, item)
 		}
 	}

@@ -95,7 +95,7 @@ func (r *HybridRetriever) AssembleBriefing(
 		briefing["memories"] = memories
 
 		// Recurring topics across this person's memories
-		if topics := r.topicCounts(personCtx.Memories); len(topics) > 0 {
+		if topics := r.TopicCounts(personCtx.Memories); len(topics) > 0 {
 			briefing["topics"] = topics
 		}
 	}
@@ -113,43 +113,24 @@ func (r *HybridRetriever) AssembleBriefing(
 	if personCtx != nil && len(personCtx.Feedbacks) > 0 {
 		feedbacks := make([]map[string]interface{}, 0, len(personCtx.Feedbacks))
 		for _, f := range personCtx.Feedbacks {
-			entry := map[string]interface{}{}
+			entry := r.feedbackEntry(f)
 			if t, ok := f["type"].(string); ok {
 				entry["type"] = t
 			}
 			if fmt_s, ok := f["format"].(string); ok {
 				entry["format"] = fmt_s
 			}
-			copyDates(entry, f)
-			if from, ok := f["from"].(string); ok {
-				entry["from"] = from
-			}
-			if id, ok := f["id"].(string); ok {
-				if items := r.feedbackItems(id); len(items) > 0 {
-					entry["items"] = items
-				}
-			}
 			feedbacks = append(feedbacks, entry)
 		}
 		briefing["feedbacks"] = feedbacks
 	}
 
-	// Assessments from graph
-	if personCtx != nil && len(personCtx.Assessments) > 0 {
-		assessments := make([]map[string]interface{}, 0, len(personCtx.Assessments))
-		for _, a := range personCtx.Assessments {
-			entry := map[string]interface{}{}
-			if d, ok := a["date"].(string); ok {
-				entry["date"] = d
-			}
-			if l, ok := a["current_level"]; ok {
-				entry["level"] = l
-			}
-			if tl, ok := a["target_level"]; ok {
-				entry["target_level"] = tl
-			}
-			assessments = append(assessments, entry)
-		}
+	// Assessments: Assessment nodes, or the memories of type assessment
+	var assessments []map[string]interface{}
+	if personCtx != nil {
+		assessments = assessmentEntries(personCtx)
+	}
+	if len(assessments) > 0 {
 		briefing["assessments"] = assessments
 	}
 
@@ -195,8 +176,10 @@ func (r *HybridRetriever) buildRecommendation(
 		}
 	case "pdi":
 		parts = append(parts, "Revise a última avaliação e os gaps identificados.")
-		if personCtx != nil && len(personCtx.Assessments) > 0 {
-			parts = append(parts, fmt.Sprintf("Última avaliação: %d registro(s) disponível(is).", len(personCtx.Assessments)))
+		if personCtx != nil {
+			if n := len(assessmentEntries(personCtx)); n > 0 {
+				parts = append(parts, fmt.Sprintf("Última avaliação: %d registro(s) disponível(is).", n))
+			}
 		}
 	case "feedback":
 		parts = append(parts, "Revise feedbacks anteriores para evitar repetição.")
@@ -207,8 +190,10 @@ func (r *HybridRetriever) buildRecommendation(
 		parts = append(parts, "Verifique pendências e sinais de risco em toda a equipe.")
 	case "progression":
 		parts = append(parts, "Compare avaliações históricas para identificar evolução.")
-		if personCtx != nil && len(personCtx.Assessments) > 0 {
-			parts = append(parts, fmt.Sprintf("%d avaliação(ões) disponível(is) para comparação.", len(personCtx.Assessments)))
+		if personCtx != nil {
+			if n := len(assessmentEntries(personCtx)); n > 0 {
+				parts = append(parts, fmt.Sprintf("%d avaliação(ões) disponível(is) para comparação.", n))
+			}
 		}
 	default:
 		if len(pendingTasks) > 0 {
@@ -268,9 +253,9 @@ func (r *HybridRetriever) feedbackItems(feedbackID string) []map[string]interfac
 	return items
 }
 
-// topicCounts counts how many of the given memories discuss each topic,
+// TopicCounts counts how many of the given memories discuss each topic,
 // most frequent first
-func (r *HybridRetriever) topicCounts(memories []map[string]interface{}) []map[string]interface{} {
+func (r *HybridRetriever) TopicCounts(memories []map[string]interface{}) []map[string]interface{} {
 	counts := map[string]int{}
 	names := map[string]string{}
 	for _, m := range memories {

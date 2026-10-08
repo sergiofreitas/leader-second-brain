@@ -188,7 +188,7 @@ func serve(args []string) {
 	mcp.AddTool(server,
 		&mcp.Tool{
 			Name:        "get_team_context",
-			Description: "Get an overview of all people reporting to a leader (including indirect reports). Returns each person with their pending tasks, recent feedbacks, and risk signals.",
+			Description: "Review a leader's team (direct and indirect reports). For each person: pending tasks (with ids), last feedback with its items, last assessment, last memory, recurring topics and signals (no_feedback, no_recent_memory, stale_task). For the team: shared_topics — topics several people share, with who, which point to collective actions — and leader_pending_tasks, what the leader has to do. The leader can be named by part of the name.",
 		},
 		func(ctx context.Context, req *mcp.CallToolRequest, in teamArgs) (*mcp.CallToolResult, any, error) {
 			argsMap := map[string]interface{}{
