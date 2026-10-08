@@ -21,41 +21,72 @@ storage:
 
 ```yaml
 providers:
-  transcription: "host"              # or "local:whisper" or "cloud:openai"
-  ocr: "host"                        # or "local:tesseract" or "cloud:google"
-  vlm: "host"                        # or "local:ollama" or "cloud:openai"
-  embedding: "local:sentence_transformers"
-  llm: "host"                        # or "local:ollama" or "cloud:openai"
-
-  local:
-    whisper:
-      model: "base"
-      device: "cpu"
-    tesseract:
-      language: "por"
-    sentence_transformers:
-      model: "all-MiniLM-L6-v2"
-      device: "cpu"
-      dimensions: 384
-    ollama:
-      endpoint: "http://localhost:11434"
-      models:
-        llm: "llama3.2"
-        vlm: "llava"
-
-  # Cloud providers (if used):
-  openai:
-    api_key: "${OPENAI_API_KEY}"
-    models:
-      vlm: "gpt-4o"
-      llm: "gpt-4o-mini"
+  transcription: "host"
+  ocr: "host"
+  vlm: "host"
+  llm: "host"
+  embedding: none        # see "Semantic search (embedding)" below
 ```
 
 `host` means the MCP host does that step: it transcribes audio, describes
 images and extracts the entities (people, topics, tasks, relationships,
 feedback items) before calling `ingest`, guided by the tool's description.
-This is how the server works today; server-side providers (`local:*`,
-`cloud:*`) are not wired yet, so the server ignores this section for now.
+This is how the server works today; `transcription`, `ocr`, `vlm` and `llm`
+are reserved for server-side providers that are not wired yet.
+
+#### Semantic search (embedding)
+
+Keyword search always works. Semantic search ("observações sobre dificuldade
+de comunicação" finding "ele não explica as decisões ao time") needs an
+embedding model, and is **off by default**: with `embedding: none` nothing
+is sent anywhere by the server.
+
+```yaml
+providers:
+  embedding:
+    provider: openai-compatible   # none | openai | ollama | openai-compatible
+    base_url: "https://litellm.example.com/v1"
+    model: "text-embedding-3-small"
+    api_key: "${SECOND_BRAIN_EMBEDDING_KEY}"
+    # Optional:
+    dimensions: 0          # shorter vectors, for models that support it (text-embedding-3)
+    query_prefix: ""       # e.g. "query: " for e5 models
+    document_prefix: ""    # e.g. "passage: " for e5 models
+    headers: {}            # extra HTTP headers, e.g. for a gateway
+    batch_size: 64         # texts per request
+    timeout_seconds: 60    # per request
+```
+
+| Provider | Where the text goes | Defaults |
+|---|---|---|
+| `none` | nowhere — semantic search is off | — |
+| `ollama` | stays on the machine (a model served by [Ollama](https://ollama.com)) | `base_url: http://localhost:11434/v1`; `model` is required — `bge-m3` is a good multilingual choice (`ollama pull bge-m3`) |
+| `openai` | OpenAI | `base_url: https://api.openai.com/v1`, `model: text-embedding-3-small`; `api_key` is required |
+| `openai-compatible` | whatever `base_url` points to: a gateway such as LiteLLM, a proxy, LM Studio, vLLM... | `base_url` and `model` are required |
+
+**What leaves the machine.** With `openai` or `openai-compatible` pointing to
+a cloud service, the text of every memory (split in passages) is sent to it
+to be embedded, and each semantic search sends the query. Note that the MCP
+host (Claude, Codex...) already reads that content too. Memories about
+people are sensitive: pick a provider your organization allows for that
+data, or `ollama` to keep it local.
+
+**API keys** belong in environment variables, referenced as `${NAME}`:
+`${...}` is expanded when the config is read, so the key is never written in
+the file. The server never logs or returns the key.
+
+**How it works.** Each memory is split into passages of ~200 words (the host
+can split long transcripts by subject itself, with `ingest`'s `segments`).
+Passages are embedded in the background, so `ingest` returns at once even
+for a one-hour transcript; failures (gateway down, rate limits) are retried
+with backoff. When semantic search runs while passages are still pending or
+failing, its result includes an `index_status` with the progress and the
+last error. Changing `model` or `dimensions` re-embeds every passage with the
+new model; switching between providers that serve the same model doesn't.
+
+The server refuses to start with an unknown provider or a missing required
+field, with a message saying what to fix (e.g. an `api_key` whose
+environment variable isn't set).
 
 ### feedback
 
@@ -97,6 +128,6 @@ skills:
 ## Example profiles
 
 See `examples/` directory:
-- `saipos/` — Saipos internal (host extraction, Qulture, stop/start/continue)
-- `startup/` — Generic startup (hybrid, freeform)
-- `personal/` — Minimal personal (all local, freeform)
+- `saipos/` — Saipos internal (host extraction, embeddings through the LiteLLM gateway, Qulture, stop/start/continue)
+- `startup/` — Generic startup (host extraction, OpenAI embeddings, freeform)
+- `personal/` — Minimal personal (host extraction, local Ollama embeddings, freeform)

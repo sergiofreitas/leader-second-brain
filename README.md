@@ -96,11 +96,14 @@ See `packages/plugins/opencode/README.md`
 
 ## Configuration profiles
 
-| Profile | Providers | API Keys | Feedback format | Graph |
-|---------|-----------|----------|-----------------|-------|
-| `saipos` | Host + local ST | 0 | stop/start/continue → Qulture | SQLite |
-| `startup` | Hybrid (local + OpenAI) | 1-2 | freeform → markdown | SQLite |
-| `personal` | All local (Whisper, Ollama, ST) | 0 | freeform → markdown | SQLite |
+| Profile | Extraction | Semantic search | API Keys | Feedback format |
+|---------|------------|-----------------|----------|-----------------|
+| `saipos` | Host | LiteLLM gateway | 1 (gateway) | stop/start/continue → Qulture |
+| `startup` | Host | OpenAI | 1 (OpenAI) | freeform → markdown |
+| `personal` | Host | Ollama, local | 0 | freeform → markdown |
+
+Without an `embedding` provider (the default), search is by keyword only and
+the server sends nothing anywhere.
 
 ## MCP tools
 
@@ -110,16 +113,16 @@ See `packages/plugins/opencode/README.md`
 | `list_people` | List known people, so the host reuses their stored names |
 | `recall` | Retrieve context about a person for 1:1, PDI, feedback, or team review |
 | `get_team_context` | Overview of all reports under a leader (recursive hierarchy) |
-| `search_memories` | Search by keyword (FTS5) or semantic similarity (vector) |
+| `search_memories` | Search by keyword (FTS5) or, with an embedding provider configured, by meaning — returning the best matching passage of each memory |
 
 ## Architecture
 
 - **MCP server**: Go, single binary, `CGO_ENABLED=0` — cross-compiles to Windows, Linux, macOS
 - **Graph engine**: SQLite tables + recursive CTEs (same database file, CGO-free)
-- **Vector search**: exact cosine similarity in pure Go (embeddings stored in the same SQLite file, no extension needed)
+- **Semantic search** (optional, off by default): passages embedded in the background through an OpenAI-compatible API (OpenAI, a gateway like LiteLLM, or a local Ollama), searched by exact cosine similarity in pure Go — see [docs/configuration.md](docs/configuration.md)
 - **Keyword search**: FTS5 (SQLite native full-text search)
 - **Storage**: One file — `memoria.db` — contains graph, memories, vectors, and FTS index
-- **Provider abstraction**: Pluggable transcription, OCR, VLM, embedding, LLM — local or cloud via config
+- **AI work**: the MCP host transcribes, describes and extracts entities; the server needs no AI provider except, optionally, for embeddings
 
 ## License
 
