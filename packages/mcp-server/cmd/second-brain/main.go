@@ -138,13 +138,14 @@ func main() {
 	mcp.AddTool(server,
 		&mcp.Tool{
 			Name:        "search_memories",
-			Description: "Search memories by keyword (FTS5 full-text search) or semantic meaning (vector search). Returns ranked results with snippets.",
+			Description: searchDescription(sb.SemanticSearchEnabled()),
 		},
 		func(ctx context.Context, req *mcp.CallToolRequest, in searchArgs) (*mcp.CallToolResult, any, error) {
 			argsMap := map[string]interface{}{
-				"query":    in.Query,
-				"semantic": in.Semantic,
-				"limit":    float64(in.Limit),
+				"query": in.Query,
+				"terms": in.Terms,
+				"mode":  in.Mode,
+				"limit": float64(in.Limit),
 			}
 			result, err := sb.HandleSearchMemories(ctx, argsMap)
 			if err != nil {
@@ -277,9 +278,25 @@ type teamArgs struct {
 }
 
 type searchArgs struct {
-	Query    string `json:"query" jsonschema:"search query — matches on content, about_person, and type"`
-	Semantic bool   `json:"semantic,omitempty" jsonschema:"if true, uses vector similarity search instead of keyword search"`
-	Limit    int    `json:"limit,omitempty" jsonschema:"max results (default: 10)"`
+	Query string   `json:"query" jsonschema:"what to look for, in the user's words"`
+	Terms []string `json:"terms,omitempty" jsonschema:"extra keywords in the language of the memories: synonyms, other inflections, prefixes ending in * (e.g. microger*, deleg*), related expressions"`
+	Mode  string   `json:"mode,omitempty" jsonschema:"hybrid (keyword + meaning), keyword or semantic; default: hybrid when semantic search is enabled, otherwise keyword"`
+	Limit int      `json:"limit,omitempty" jsonschema:"max results (default: 10)"`
+}
+
+// searchDescription tells the host how to search, depending on whether
+// semantic search is enabled
+func searchDescription(semantic bool) string {
+	lines := []string{
+		"Search the leader's memories. Returns each matching memory once, best first, with an excerpt of the matching part (for long transcripts, the relevant passage) and how it was found.",
+		"Always pass terms: the keyword search matches exact words and doesn't know that \"microgestão\", \"microgerenciando\" and \"não delega\" are related, so add 5 to 15 synonyms, other inflections, prefixes ending in * (microger*, deleg*) and related expressions, in the language of the memories.",
+	}
+	if semantic {
+		lines = append(lines, "Semantic search is enabled: the default mode, hybrid, also matches by meaning. It always returns the nearest memories, so results found only by meaning (matched_by: semantic) with a low similarity may be unrelated — judge them before using them. If the result has index_status, recent memories may not be searchable by meaning yet; if it has semantic_error, only keywords were used.")
+	} else {
+		lines = append(lines, "Semantic search is not configured on this server, so search is by keyword only: the terms are what make it find related memories.")
+	}
+	return strings.Join(lines, "\n")
 }
 
 // toCallToolResult converts our internal ToolResult to the MCP SDK's CallToolResult

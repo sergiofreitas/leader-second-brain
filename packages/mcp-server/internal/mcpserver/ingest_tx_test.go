@@ -106,7 +106,7 @@ func TestIngestIsAtomic(t *testing.T) {
 	if _, err := srv.store.GetPersonByName("Sérgio"); !errors.Is(err, sql.ErrNoRows) {
 		t.Errorf("person after failed ingest: err = %v, want ErrNoRows", err)
 	}
-	if results, err := srv.store.SearchFTS("microgerenciando", 10); err != nil || len(results) != 0 {
+	if results, err := srv.store.SearchFTS("microgerenciando", nil, 10); err != nil || len(results) != 0 {
 		t.Errorf("FTS after failed ingest = %v (err %v), want no memories", results, err)
 	}
 	var nodes, chunks int

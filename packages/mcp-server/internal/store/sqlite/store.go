@@ -358,43 +358,6 @@ func (s *Store) GetPendingTasks(personID string) ([]map[string]interface{}, erro
 }
 
 // ============================================================
-// FTS5 Search
-// ============================================================
-
-func (s *Store) SearchFTS(query string, limit int) ([]map[string]interface{}, error) {
-	rows, err := s.q.Query(
-		`SELECT m.id, m.type, m.content, m.about_person, m.created_at,
-			snippet(memories_fts, 0, '<mark>', '</mark>', '...', 32) as snippet,
-			bm25(memories_fts) as rank
-		 FROM memories_fts
-		 JOIN memories m ON m.rowid = memories_fts.rowid
-		 WHERE memories_fts MATCH ?
-		 ORDER BY rank
-		 LIMIT ?`,
-		query, limit,
-	)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-
-	var results []map[string]interface{}
-	for rows.Next() {
-		var id, memType, content, aboutPerson, createdAt, snippet string
-		var rank float64
-		if err := rows.Scan(&id, &memType, &content, &aboutPerson, &createdAt, &snippet, &rank); err != nil {
-			return nil, err
-		}
-		results = append(results, map[string]interface{}{
-			"id": id, "type": memType, "content": content,
-			"about_person": aboutPerson, "created_at": createdAt,
-			"snippet": snippet, "rank": rank,
-		})
-	}
-	return results, nil
-}
-
-// ============================================================
 // Metadata
 // ============================================================
 

@@ -186,7 +186,7 @@ func (s *Server) HandleRecall(ctx context.Context, args map[string]interface{}) 
 	tasks := personCtx.Tasks
 
 	// Search for related memories via FTS5
-	ftsResults, _ := s.store.SearchFTS(personName, 10)
+	ftsResults, _ := s.store.SearchFTS(personName, nil, 10)
 
 	// Assemble the briefing
 	briefing := s.retriever.AssembleBriefing(personName, contextType, personCtx, tasks, ftsResults)
@@ -248,54 +248,6 @@ func (s *Server) HandleGetTeamContext(ctx context.Context, args map[string]inter
 	}
 
 	resultJSON, _ := json.MarshalIndent(result, "", "  ")
-	return &ToolResult{
-		Content: []ContentBlock{{Type: "text", Text: string(resultJSON)}},
-	}, nil
-}
-
-// HandleSearchMemories processes a search_memories tool call
-func (s *Server) HandleSearchMemories(ctx context.Context, args map[string]interface{}) (*ToolResult, error) {
-	query, _ := args["query"].(string)
-	semantic, _ := args["semantic"].(bool)
-	limit := 10
-	if l, ok := args["limit"].(float64); ok && l > 0 {
-		limit = int(l)
-	}
-
-	var results []map[string]interface{}
-	var err error
-
-	if semantic {
-		if s.embedding == nil {
-			return nil, fmt.Errorf("semantic search is disabled: no embedding provider is configured (see the embedding section of docs/configuration.md); use keyword search instead")
-		}
-		queryVec, embErr := s.embedding.Embed(query)
-		if embErr != nil {
-			return nil, fmt.Errorf("embed query: %w", embErr)
-		}
-		results, err = s.store.SearchVector(queryVec, limit)
-	} else {
-		results, err = s.store.SearchFTS(query, limit)
-	}
-	if err != nil {
-		return nil, fmt.Errorf("search: %w", err)
-	}
-
-	out := map[string]interface{}{
-		"query":   query,
-		"mode":    map[bool]string{true: "semantic", false: "keyword"}[semantic],
-		"count":   len(results),
-		"results": results,
-	}
-	// Recent memories may not be embedded yet, or the provider may be
-	// failing (wrong key, gateway down): say so, so the host can explain
-	if semantic {
-		if status, err := s.indexer.Status(); err == nil && (status.Pending > 0 || status.Failed > 0 || status.LastError != "") {
-			out["index_status"] = status
-		}
-	}
-	resultJSON, _ := json.MarshalIndent(out, "", "  ")
-
 	return &ToolResult{
 		Content: []ContentBlock{{Type: "text", Text: string(resultJSON)}},
 	}, nil

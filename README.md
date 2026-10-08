@@ -113,7 +113,7 @@ the server sends nothing anywhere.
 | `list_people` | List known people, so the host reuses their stored names |
 | `recall` | Retrieve context about a person for 1:1, PDI, feedback, or team review |
 | `get_team_context` | Overview of all reports under a leader (recursive hierarchy) |
-| `search_memories` | Search by keyword (FTS5) or, with an embedding provider configured, by meaning — returning the best matching passage of each memory |
+| `search_memories` | Search by keyword (FTS5, with synonyms and inflections added by the host) and, with an embedding provider configured, by meaning — fused into one ranking, with the best matching passage of each memory |
 
 ## Architecture
 

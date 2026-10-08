@@ -56,11 +56,26 @@ MCP Server (Go binary)
 
 ### Search
 
-`search_memories` searches by keyword (FTS5, BM25 ranking) or, when an
-embedding provider is configured, by meaning: the query is embedded and
-compared with every passage (exact cosine similarity in Go). Each memory is
-returned once, with its best matching passage as the excerpt — for a long
-transcript, the part that matters rather than the whole text.
+`search_memories` has three modes:
+
+- **keyword** — FTS5 with BM25 ranking. FTS5 doesn't stem Portuguese
+  ("microgestão" doesn't match "microgerenciando"), so the host sends extra
+  `terms`: synonyms, inflections, prefixes (`microger*`) and related
+  expressions. The query is rebuilt from quoted words, so user text such as
+  "1:1" or a stray quote is searched literally instead of being parsed as
+  FTS5 syntax.
+- **semantic** — the query is embedded and compared with every passage
+  (exact cosine similarity in Go). It always returns the nearest passages,
+  related or not.
+- **hybrid** (the default when an embedding provider is configured) — both,
+  fused with Reciprocal Rank Fusion: each memory scores the sum of
+  1/(60 + rank) over the lists it appears in, so memories found both ways
+  rise and neither score scale dominates. If the embedding provider fails,
+  hybrid falls back to keyword and reports `semantic_error`.
+
+Each memory is returned once, with how it was found (`matched_by`) and an
+excerpt: its best matching passage — for a long transcript, the part that
+matters rather than the whole text — and/or a keyword snippet.
 
 ## Semantic search
 
