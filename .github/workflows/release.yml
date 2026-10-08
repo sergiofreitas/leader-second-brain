@@ -21,7 +21,8 @@ jobs:
 
       - uses: actions/setup-go@v5
         with:
-          go-version: '1.23'
+          go-version-file: packages/mcp-server/go.mod
+          cache-dependency-path: packages/mcp-server/go.sum
 
       - name: Build binary
         env:
