@@ -51,6 +51,9 @@ func (s *Server) HandleSearchMemories(ctx context.Context, args map[string]inter
 	}
 
 	out := map[string]interface{}{"query": query, "mode": mode}
+	if s.semanticProblem != "" {
+		out["semantic_unavailable"] = s.semanticProblem
+	}
 	if len(terms) > 0 {
 		out["terms"] = terms
 	}
@@ -91,8 +94,15 @@ func (s *Server) HandleSearchMemories(ctx context.Context, args map[string]inter
 // SemanticSearchEnabled reports whether an embedding provider is configured
 func (s *Server) SemanticSearchEnabled() bool { return s.embedding != nil }
 
+// SemanticSearchProblem says why a configured embedding provider couldn't
+// start, or "" when none is configured or it started
+func (s *Server) SemanticSearchProblem() string { return s.semanticProblem }
+
 // semanticSearch embeds the query and returns the most similar memories
 func (s *Server) semanticSearch(query string, limit int) ([]map[string]interface{}, error) {
+	if s.embedding == nil && s.semanticProblem != "" {
+		return nil, fmt.Errorf("semantic search is disabled: %s; use keyword search instead", s.semanticProblem)
+	}
 	if s.embedding == nil {
 		return nil, fmt.Errorf("semantic search is disabled: no embedding provider is configured (see the embedding section of docs/configuration.md); use keyword search instead")
 	}

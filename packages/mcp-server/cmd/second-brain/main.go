@@ -206,7 +206,7 @@ func serve(args []string) {
 	mcp.AddTool(server,
 		&mcp.Tool{
 			Name:        "search_memories",
-			Description: searchDescription(sb.SemanticSearchEnabled()),
+			Description: searchDescription(sb.SemanticSearchEnabled(), sb.SemanticSearchProblem()),
 		},
 		func(ctx context.Context, req *mcp.CallToolRequest, in searchArgs) (*mcp.CallToolResult, any, error) {
 			argsMap := map[string]interface{}{
@@ -365,14 +365,16 @@ type searchArgs struct {
 }
 
 // searchDescription tells the host how to search, depending on whether
-// semantic search is enabled
-func searchDescription(semantic bool) string {
+// semantic search is enabled, or configured but broken (problem)
+func searchDescription(semantic bool, problem string) string {
 	lines := []string{
 		"Search the leader's memories. Returns each matching memory once, best first, with an excerpt of the matching part (for long transcripts, the relevant passage) and how it was found.",
 		"Always pass terms: the keyword search matches exact words and doesn't know that \"microgestão\", \"microgerenciando\" and \"não delega\" are related, so add 5 to 15 synonyms, other inflections, prefixes ending in * (microger*, deleg*) and related expressions, in the language of the memories.",
 	}
 	if semantic {
 		lines = append(lines, "Semantic search is enabled: the default mode, hybrid, also matches by meaning. It always returns the nearest memories, so results found only by meaning (matched_by: semantic) with a low similarity may be unrelated — judge them before using them. If the result has index_status, recent memories may not be searchable by meaning yet; if it has semantic_error, only keywords were used.")
+	} else if problem != "" {
+		lines = append(lines, "Semantic search is configured but couldn't start ("+problem+"), so search is by keyword only until the configuration is fixed: tell the user, and rely on the terms to find related memories.")
 	} else {
 		lines = append(lines, "Semantic search is not configured on this server, so search is by keyword only: the terms are what make it find related memories.")
 	}

@@ -307,6 +307,9 @@ func (s *Server) HandleIngest(ctx context.Context, args map[string]interface{}) 
 
 	// Semantic indexing happens in the background, after the commit
 	semanticIndex := "disabled (no embedding provider configured)"
+	if s.semanticProblem != "" {
+		semanticIndex = "disabled (" + s.semanticProblem + ")"
+	}
 	if s.indexer != nil {
 		s.indexer.Notify()
 		semanticIndex = "queued"

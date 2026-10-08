@@ -137,7 +137,7 @@ func TestSemanticSearchOverHTTP(t *testing.T) {
 }
 
 // TestEmbeddingFromConfig checks New enables semantic search from the config,
-// and refuses to start with an invalid provider
+// and still starts, with keyword search, when the provider can't start
 func TestEmbeddingFromConfig(t *testing.T) {
 	cfg := &config.Config{Graph: config.GraphConfig{Engine: "sqlite"}}
 	cfg.Storage.SQLite.Path = t.TempDir() + "/cfg.db"
@@ -153,10 +153,38 @@ func TestEmbeddingFromConfig(t *testing.T) {
 	}
 	srv.Close()
 
-	cfg.Storage.SQLite.Path = t.TempDir() + "/bad.db"
-	cfg.Providers.Embedding = config.EmbeddingConfig{Provider: "local:sentence_transformers"}
-	if _, err := New(cfg); err == nil || !strings.Contains(err.Error(), "unknown embedding provider") {
-		t.Errorf("New with an unknown provider = %v", err)
+	// A provider that can't start: an unknown one, or OpenAI without a key
+	// (the variable wasn't set where the MCP host started the server)
+	for _, c := range []struct {
+		embedding config.EmbeddingConfig
+		problem   string
+	}{
+		{config.EmbeddingConfig{Provider: "local:sentence_transformers"}, "unknown embedding provider"},
+		{config.EmbeddingConfig{Provider: "openai", Model: "text-embedding-3-small"}, "api_key"},
+	} {
+		cfg.Storage.SQLite.Path = t.TempDir() + "/broken.db"
+		cfg.Providers.Embedding = c.embedding
+		srv, err := New(cfg)
+		if err != nil {
+			t.Fatalf("New with provider %q = %v, want it to start with keyword search", c.embedding.Provider, err)
+		}
+		if srv.SemanticSearchEnabled() || !strings.Contains(srv.SemanticSearchProblem(), c.problem) {
+			t.Errorf("provider %q: enabled %v, problem %q", c.embedding.Provider, srv.SemanticSearchEnabled(), srv.SemanticSearchProblem())
+		}
+		stored := call(t, "ingest", srv.HandleIngest, map[string]interface{}{
+			"modality": "text", "content": "Evandro resolveu um bug de TEF sozinho.", "about_person": "Evandro",
+		})
+		if index, _ := stored["semantic_index"].(string); !strings.Contains(index, c.problem) {
+			t.Errorf("provider %q: semantic_index = %q, want the problem", c.embedding.Provider, index)
+		}
+		found := call(t, "search_memories", srv.HandleSearchMemories, map[string]interface{}{"query": "TEF"})
+		if found["mode"] != "keyword" || found["count"] != float64(1) || !strings.Contains(found["semantic_unavailable"].(string), c.problem) {
+			t.Errorf("provider %q: search = %s", c.embedding.Provider, toJSON(found))
+		}
+		if _, err := srv.HandleSearchMemories(context.Background(), map[string]interface{}{"query": "TEF", "mode": "semantic"}); err == nil || !strings.Contains(err.Error(), c.problem) {
+			t.Errorf("provider %q: semantic search error = %v, want the problem", c.embedding.Provider, err)
+		}
+		srv.Close()
 	}
 }
 

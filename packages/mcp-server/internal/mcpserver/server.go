@@ -27,10 +27,13 @@ type Server struct {
 	store     *sqlite.Store
 	graph     graph.GraphEngine
 	embedding providers.EmbeddingProvider // nil: semantic search disabled
-	indexer   *indexer.Indexer            // embeds chunks in the background (nil without embedding)
-	llm       providers.LLMProvider
-	retriever *retrieve.HybridRetriever
-	adapter   providers.OutputAdapter
+	// semanticProblem says why a configured embedding provider couldn't
+	// start ("" when none is configured or it started)
+	semanticProblem string
+	indexer         *indexer.Indexer // embeds chunks in the background (nil without embedding)
+	llm             providers.LLMProvider
+	retriever       *retrieve.HybridRetriever
+	adapter         providers.OutputAdapter
 
 	stopIndexer context.CancelFunc
 	indexerDone chan struct{}
@@ -84,8 +87,12 @@ func New(cfg *config.Config) (*Server, error) {
 	// default nothing leaves the machine through the server
 	embedder, err := embedding.New(cfg.Providers.Embedding)
 	if err != nil {
-		store.Close()
-		return nil, err
+		// A broken embedding config (a missing API key, a typo) mustn't stop
+		// the server: the MCP host would only see "connection closed".
+		// Search falls back to keywords and its results say why.
+		s.semanticProblem = fmt.Sprintf("the embedding provider couldn't start: %v", err)
+		log.Printf("Semantic search: disabled — %s", s.semanticProblem)
+		return s, nil
 	}
 	if embedder == nil {
 		log.Printf("Semantic search: disabled (no embedding provider configured)")
