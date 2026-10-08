@@ -241,9 +241,11 @@ func (s *Store) GetMemory(id string) (map[string]interface{}, error) {
 // Person CRUD
 // ============================================================
 
-func (s *Store) UpsertPerson(id, name, role, area, track string, jobLevel int) error {
+// InsertPerson stores a new person. It fails if the ID is already taken, so
+// an ID collision never silently replaces someone else.
+func (s *Store) InsertPerson(id, name, role, area, track string, jobLevel int) error {
 	_, err := s.q.Exec(
-		`INSERT OR REPLACE INTO persons (id, name, role, area, track, job_level)
+		`INSERT INTO persons (id, name, role, area, track, job_level)
 		 VALUES (?, ?, ?, ?, ?, ?)`,
 		id, name, role, area, track, jobLevel,
 	)

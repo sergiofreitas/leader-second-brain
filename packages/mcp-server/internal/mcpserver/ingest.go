@@ -402,8 +402,8 @@ func ensurePerson(st *sqlite.Store, g graph.GraphEngine, name, role string) (id,
 		return "", "", false, fmt.Errorf("find person %q: %w", name, err)
 	}
 	id = generateID("person")
-	if err := st.UpsertPerson(id, name, role, "", "", 0); err != nil {
-		return "", "", false, fmt.Errorf("upsert person: %w", err)
+	if err := st.InsertPerson(id, name, role, "", "", 0); err != nil {
+		return "", "", false, fmt.Errorf("insert person: %w", err)
 	}
 	if err := g.AddNode("Person", id, map[string]interface{}{
 		"name": name, "role": role,

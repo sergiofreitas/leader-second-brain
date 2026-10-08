@@ -2,7 +2,9 @@ package mcpserver
 
 import (
 	"context"
+	"crypto/rand"
 	"database/sql"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"log"
@@ -267,9 +269,19 @@ func (s *Server) Close() error {
 	return s.store.Close()
 }
 
-// generateID creates a unique ID with a prefix
+// now is the clock behind generateID; tests replace it to freeze time
+var now = time.Now
+
+// generateID creates a unique ID with a prefix. The timestamp keeps IDs
+// roughly in creation order; the random suffix keeps them unique when the
+// clock doesn't advance between calls (on Windows it ticks every ~100ns or
+// coarser, so the people of one ingest used to get the same ID).
 func generateID(prefix string) string {
-	return fmt.Sprintf("%s_%d", prefix, time.Now().UnixNano())
+	var suffix [8]byte
+	if _, err := rand.Read(suffix[:]); err != nil {
+		panic(fmt.Sprintf("generate id: %v", err))
+	}
+	return fmt.Sprintf("%s_%d_%s", prefix, now().UnixNano(), hex.EncodeToString(suffix[:]))
 }
 
 // Adapter returns the configured output adapter

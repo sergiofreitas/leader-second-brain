@@ -26,7 +26,7 @@ func TestInTx(t *testing.T) {
 		if err := st.InsertChunks("m_rb", []string{"rolled back"}); err != nil {
 			return err
 		}
-		if err := st.UpsertPerson("p_rb", "Ana", "", "", "", 0); err != nil {
+		if err := st.InsertPerson("p_rb", "Ana", "", "", "", 0); err != nil {
 			return err
 		}
 		st.updateIndex("1", []float32{1, 0, 0})
