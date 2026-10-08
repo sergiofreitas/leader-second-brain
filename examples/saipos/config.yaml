@@ -1,0 +1,50 @@
+# Second Brain — Saipos Configuration
+# Uses Toqan as AI provider (proxy transparent — no API keys needed)
+
+profile: saipos
+
+storage:
+  sqlite:
+    path: "~/.second-brain/memoria.db"
+  media:
+    path: "~/.second-brain/media/"
+    max_size_mb: 5000
+    retention_days: 365
+
+providers:
+  # Saipos: Toqan handles all AI processing via proxy
+  transcription: "toqan"
+  ocr: "toqan"
+  vlm: "toqan"
+  embedding: "local:sentence_transformers"
+  llm: "toqan"
+
+  toqan:
+    endpoint: "${TOQAN_MCP_ENDPOINT}"
+
+  local:
+    sentence_transformers:
+      model: "all-MiniLM-L6-v2"
+      device: "cpu"
+      dimensions: 384
+
+transport:
+  type: stdio
+
+graph:
+  engine: graphlite
+
+skills:
+  second_brain: true
+  one_on_one: true
+  pdi_gap_map: true
+  feedback: true
+
+feedback:
+  format: stop_start_continue
+  categories:
+    - { id: "stop", label: "Parar de fazer", color: "#d97757" }
+    - { id: "start", label: "Começar a fazer", color: "#788c5d" }
+    - { id: "continue", label: "Continuar fazendo", color: "#6a9bcc" }
+  items_per_category: 2
+  target_system: qulture

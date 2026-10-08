@@ -1,0 +1,11 @@
+{
+  "name": "second-brain",
+  "version": "0.1.0",
+  "description": "Second Brain — memory for leadership. Capture observations about your team and recall context before 1:1s, PDIs, and feedback sessions.",
+  "mcpServers": {
+    "second-brain": {
+      "command": "${CLAUDE_PLUGIN_ROOT}/bin/second-brain",
+      "args": ["--config", "${CLAUDE_PLUGIN_DATA}/config.yaml"]
+    }
+  }
+}

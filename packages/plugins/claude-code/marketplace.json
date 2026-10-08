@@ -1,0 +1,12 @@
+{
+  "name": "second-brain",
+  "owner": "second-brain",
+  "plugins": [
+    {
+      "name": "second-brain",
+      "source": "./",
+      "description": "Memory for leadership — capture observations and recall context for 1:1s, PDIs, and feedback",
+      "version": "0.1.0"
+    }
+  ]
+}

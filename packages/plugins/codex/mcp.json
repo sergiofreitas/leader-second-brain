@@ -1,0 +1,9 @@
+{
+  "mcpServers": {
+    "second-brain": {
+      "type": "stdio",
+      "command": "second-brain",
+      "args": ["--config", "${SECOND_BRAIN_CONFIG:-~/.second-brain/config.yaml}"]
+    }
+  }
+}

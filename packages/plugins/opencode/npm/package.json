@@ -1,0 +1,12 @@
+{
+  "name": "second-brain-opencode",
+  "version": "0.1.0",
+  "description": "Second Brain — memory for leadership. OpenCode plugin wrapper.",
+  "license": "MIT",
+  "bin": {
+    "second-brain-setup": "./setup.js"
+  },
+  "scripts": {
+    "postinstall": "node ./setup.js"
+  }
+}

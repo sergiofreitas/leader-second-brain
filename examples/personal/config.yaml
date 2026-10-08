@@ -1,0 +1,54 @@
+# Second Brain — Personal Configuration
+# Minimal setup for single-user personal use
+
+profile: personal
+
+storage:
+  sqlite:
+    path: "~/.second-brain/memoria.db"
+  media:
+    path: "~/.second-brain/media/"
+    max_size_mb: 1000
+    retention_days: 90
+
+providers:
+  transcription: "local:whisper"
+  ocr: "local:tesseract"
+  vlm: "local:ollama"
+  embedding: "local:sentence_transformers"
+  llm: "local:ollama"
+
+  local:
+    whisper:
+      model: "tiny"
+      device: "cpu"
+    tesseract:
+      language: "eng"
+    sentence_transformers:
+      model: "all-MiniLM-L6-v2"
+      device: "cpu"
+      dimensions: 384
+    ollama:
+      endpoint: "http://localhost:11434"
+      models:
+        llm: "llama3.2"
+        vlm: "llava"
+
+transport:
+  type: stdio
+
+graph:
+  engine: graphlite
+
+feedback:
+  format: freeform
+  categories:
+    - { id: "general", label: "Feedback" }
+  items_per_category: 0
+  target_system: markdown
+
+skills:
+  second_brain: true
+  one_on_one: false
+  pdi_gap_map: false
+  feedback: false

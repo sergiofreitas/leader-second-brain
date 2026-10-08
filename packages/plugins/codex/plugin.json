@@ -1,0 +1,13 @@
+{
+  "name": "second-brain",
+  "version": "0.1.0",
+  "description": "Second Brain — memory for leadership. Capture observations about your team and recall context before 1:1s, PDIs, and feedback sessions.",
+  "extensions": {
+    "com.openai": {
+      "presentation": {
+        "name": "Second Brain",
+        "description": "Leadership memory and context retrieval"
+      }
+    }
+  }
+}

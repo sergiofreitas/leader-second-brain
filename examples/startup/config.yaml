@@ -1,0 +1,55 @@
+# Second Brain — Generic Startup Configuration
+# Hybrid: local for transcription/OCR/embedding, cloud for VLM/LLM
+
+profile: generic
+
+storage:
+  sqlite:
+    path: "~/.second-brain/memoria.db"
+  media:
+    path: "~/.second-brain/media/"
+    max_size_mb: 2000
+    retention_days: 180
+
+providers:
+  transcription: "local:whisper"
+  ocr: "local:tesseract"
+  vlm: "cloud:openai"
+  embedding: "local:sentence_transformers"
+  llm: "cloud:openai"
+
+  local:
+    whisper:
+      model: "base"
+      device: "cpu"
+    tesseract:
+      language: "eng"
+    sentence_transformers:
+      model: "all-MiniLM-L6-v2"
+      device: "cpu"
+      dimensions: 384
+
+  openai:
+    api_key: "${OPENAI_API_KEY}"
+    models:
+      vlm: "gpt-4o"
+      llm: "gpt-4o-mini"
+
+transport:
+  type: stdio
+
+graph:
+  engine: graphlite
+
+skills:
+  second_brain: true
+  one_on_one: false
+  pdi_gap_map: false
+  feedback: true
+
+feedback:
+  format: freeform
+  categories:
+    - { id: "general", label: "Feedback geral" }
+  items_per_category: 0
+  target_system: markdown
