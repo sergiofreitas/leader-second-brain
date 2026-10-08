@@ -154,7 +154,7 @@ func decodeVector(buf []byte) ([]float32, error) {
 
 // loadVectors fills the in-memory index from memory_embeddings
 func (s *Store) loadVectors() error {
-	rows, err := s.db.Query(`SELECT memory_id, vector FROM memory_embeddings`)
+	rows, err := s.q.Query(`SELECT memory_id, vector FROM memory_embeddings`)
 	if err != nil {
 		return err
 	}
@@ -181,23 +181,37 @@ func (s *Store) InsertVector(memoryID string, embedding []float32) error {
 	if vec == nil {
 		return nil
 	}
-	if _, err := s.db.Exec(
+	if _, err := s.q.Exec(
 		`INSERT OR REPLACE INTO memory_embeddings (memory_id, dim, vector) VALUES (?, ?, ?)`,
 		memoryID, len(vec), encodeVector(vec),
 	); err != nil {
 		return err
 	}
-	s.vectors.put(memoryID, vec)
+	s.updateIndex(memoryID, vec)
 	return nil
 }
 
 // DeleteVector removes the embedding of a memory
 func (s *Store) DeleteVector(memoryID string) error {
-	if _, err := s.db.Exec(`DELETE FROM memory_embeddings WHERE memory_id = ?`, memoryID); err != nil {
+	if _, err := s.q.Exec(`DELETE FROM memory_embeddings WHERE memory_id = ?`, memoryID); err != nil {
 		return err
 	}
-	s.vectors.remove(memoryID)
+	s.updateIndex(memoryID, nil)
 	return nil
+}
+
+// updateIndex puts vec in the in-memory index (or removes the entry when vec
+// is nil). Inside a transaction the change is deferred until commit.
+func (s *Store) updateIndex(memoryID string, vec []float32) {
+	if s.inTx() {
+		*s.pendingVectors = append(*s.pendingVectors, pendingVector{memoryID, vec})
+		return
+	}
+	if vec == nil {
+		s.vectors.remove(memoryID)
+	} else {
+		s.vectors.put(memoryID, vec)
+	}
 }
 
 // SearchVector returns the memories most similar to queryVec, best first.
@@ -218,7 +232,7 @@ func (s *Store) SearchVector(queryVec []float32, limit int) ([]map[string]interf
 		placeholders[i] = "?"
 		args[i] = h.id
 	}
-	rows, err := s.db.Query(
+	rows, err := s.q.Query(
 		`SELECT id, content, type, COALESCE(about_person, ''), created_at
 		 FROM memories WHERE id IN (`+strings.Join(placeholders, ", ")+`)`,
 		args...,

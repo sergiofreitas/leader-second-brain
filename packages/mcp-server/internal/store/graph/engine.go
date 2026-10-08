@@ -1,8 +1,15 @@
 package graph
 
+import "database/sql"
+
 // GraphEngine is the interface for graph operations.
-// Currently implemented by GraphliteEngine (openCypher on SQLite, CGO-free).
+// Currently implemented by SQLiteEngine (graph tables in the store's SQLite file).
 type GraphEngine interface {
+	// WithTx returns a copy of the engine whose operations run inside tx,
+	// so graph writes can commit or roll back together with the store's
+	WithTx(tx *sql.Tx) GraphEngine
+
+
 	// Node operations
 	AddNode(label string, id string, props map[string]interface{}) error
 	GetNode(label string, id string) (map[string]interface{}, error)

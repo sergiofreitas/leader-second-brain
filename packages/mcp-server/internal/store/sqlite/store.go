@@ -11,19 +11,38 @@ import (
 // CGO-free via modernc.org/sqlite.
 type Store struct {
 	db      *sql.DB
+	q       DBTX // db, or the transaction of a store returned by InTx
 	vectors *vectorIndex
+	// pendingVectors holds the embeddings written inside a transaction; they
+	// reach the in-memory index only after the transaction commits
+	pendingVectors *[]pendingVector
+}
+
+// DBTX is the query interface shared by *sql.DB and *sql.Tx
+type DBTX interface {
+	Exec(query string, args ...interface{}) (sql.Result, error)
+	Query(query string, args ...interface{}) (*sql.Rows, error)
+	QueryRow(query string, args ...interface{}) *sql.Row
+}
+
+// pendingVector is an index change deferred until commit (nil vec = removal)
+type pendingVector struct {
+	id  string
+	vec []float32
 }
 
 // New creates a new SQLite store at the given path
 func New(dbPath string) (*Store, error) {
 	// WAL for concurrent reads; busy_timeout so concurrent writers wait for
-	// the lock instead of failing with SQLITE_BUSY
-	db, err := sql.Open("sqlite", dbPath+"?_pragma=journal_mode(wal)&_pragma=foreign_keys(1)&_pragma=busy_timeout(5000)")
+	// the lock instead of failing with SQLITE_BUSY; _txlock=immediate takes
+	// the write lock at BEGIN, so a transaction that reads before writing
+	// can't fail with SQLITE_BUSY when it upgrades to a writer
+	db, err := sql.Open("sqlite", dbPath+"?_pragma=journal_mode(wal)&_pragma=foreign_keys(1)&_pragma=busy_timeout(5000)&_txlock=immediate")
 	if err != nil {
 		return nil, fmt.Errorf("open sqlite: %w", err)
 	}
 
-	s := &Store{db: db, vectors: newVectorIndex()}
+	s := &Store{db: db, q: db, vectors: newVectorIndex()}
 	if err := s.initSchema(); err != nil {
 		db.Close()
 		return nil, fmt.Errorf("init schema: %w", err)
@@ -145,7 +164,7 @@ func (s *Store) initSchema() error {
 	}
 
 	for _, stmt := range schema {
-		if _, err := s.db.Exec(stmt); err != nil {
+		if _, err := s.q.Exec(stmt); err != nil {
 			return fmt.Errorf("exec [%s]: %w", stmt[:60], err)
 		}
 	}
@@ -158,7 +177,7 @@ func (s *Store) initSchema() error {
 // ============================================================
 
 func (s *Store) InsertMemory(id, memType, content, modality, source, rawFileRef, aboutPerson string, confidence float64) error {
-	_, err := s.db.Exec(
+	_, err := s.q.Exec(
 		`INSERT INTO memories (id, type, content, modality, source, raw_file_ref, about_person, confidence)
 		 VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
 		id, memType, content, modality, source, rawFileRef, aboutPerson, confidence,
@@ -168,7 +187,7 @@ func (s *Store) InsertMemory(id, memType, content, modality, source, rawFileRef,
 
 func (s *Store) GetMemory(id string) (map[string]interface{}, error) {
 	var m map[string]interface{}
-	row := s.db.QueryRow(
+	row := s.q.QueryRow(
 		`SELECT id, type, content, modality, source, raw_file_ref, about_person, created_at, confidence
 		 FROM memories WHERE id = ?`, id,
 	)
@@ -191,7 +210,7 @@ func (s *Store) GetMemory(id string) (map[string]interface{}, error) {
 // ============================================================
 
 func (s *Store) UpsertPerson(id, name, role, area, track string, jobLevel int) error {
-	_, err := s.db.Exec(
+	_, err := s.q.Exec(
 		`INSERT OR REPLACE INTO persons (id, name, role, area, track, job_level)
 		 VALUES (?, ?, ?, ?, ?, ?)`,
 		id, name, role, area, track, jobLevel,
@@ -201,7 +220,7 @@ func (s *Store) UpsertPerson(id, name, role, area, track string, jobLevel int) e
 
 func (s *Store) GetPersonByName(name string) (string, error) {
 	var id string
-	err := s.db.QueryRow(`SELECT id FROM persons WHERE name = ?`, name).Scan(&id)
+	err := s.q.QueryRow(`SELECT id FROM persons WHERE name = ?`, name).Scan(&id)
 	return id, err
 }
 
@@ -210,7 +229,7 @@ func (s *Store) GetPersonByName(name string) (string, error) {
 // ============================================================
 
 func (s *Store) InsertTask(id, description, owner, status string) error {
-	_, err := s.db.Exec(
+	_, err := s.q.Exec(
 		`INSERT INTO tasks (id, description, owner, status) VALUES (?, ?, ?, ?)`,
 		id, description, owner, status,
 	)
@@ -218,7 +237,7 @@ func (s *Store) InsertTask(id, description, owner, status string) error {
 }
 
 func (s *Store) GetPendingTasks(personID string) ([]map[string]interface{}, error) {
-	rows, err := s.db.Query(
+	rows, err := s.q.Query(
 		`SELECT id, description, owner, status, created_at FROM tasks
 		 WHERE owner = ? AND status = 'pending' ORDER BY created_at DESC`,
 		personID,
@@ -247,7 +266,7 @@ func (s *Store) GetPendingTasks(personID string) ([]map[string]interface{}, erro
 // ============================================================
 
 func (s *Store) SearchFTS(query string, limit int) ([]map[string]interface{}, error) {
-	rows, err := s.db.Query(
+	rows, err := s.q.Query(
 		`SELECT m.id, m.type, m.content, m.about_person, m.created_at,
 			snippet(memories_fts, 0, '<mark>', '</mark>', '...', 32) as snippet,
 			bm25(memories_fts) as rank
@@ -284,7 +303,7 @@ func (s *Store) SearchFTS(query string, limit int) ([]map[string]interface{}, er
 // ============================================================
 
 func (s *Store) SetMeta(key, value string) error {
-	_, err := s.db.Exec(
+	_, err := s.q.Exec(
 		`INSERT OR REPLACE INTO metadata (key, value) VALUES (?, ?)`,
 		key, value,
 	)
@@ -293,14 +312,59 @@ func (s *Store) SetMeta(key, value string) error {
 
 func (s *Store) GetMeta(key string) (string, error) {
 	var value string
-	err := s.db.QueryRow(`SELECT value FROM metadata WHERE key = ?`, key).Scan(&value)
+	err := s.q.QueryRow(`SELECT value FROM metadata WHERE key = ?`, key).Scan(&value)
 	return value, err
 }
 
 func (s *Store) Close() error {
+	if s.inTx() {
+		return fmt.Errorf("close: store is bound to a transaction")
+	}
 	return s.db.Close()
 }
 
+// ============================================================
+// Transactions
+// ============================================================
+
+func (s *Store) inTx() bool { return s.pendingVectors != nil }
+
+// InTx runs fn in a single transaction. fn receives the transaction (to bind
+// other components, like the graph engine, to it) and a copy of the store
+// whose queries run inside it. The transaction commits if fn returns nil and
+// rolls back otherwise; embeddings written by fn reach the vector index only
+// after the commit.
+func (s *Store) InTx(fn func(tx *sql.Tx, st *Store) error) (err error) {
+	if s.inTx() {
+		return fmt.Errorf("nested transactions are not supported")
+	}
+	tx, err := s.db.Begin()
+	if err != nil {
+		return fmt.Errorf("begin: %w", err)
+	}
+	defer func() {
+		if p := recover(); p != nil {
+			tx.Rollback()
+			panic(p)
+		}
+	}()
+
+	pending := []pendingVector{}
+	txStore := &Store{db: s.db, q: tx, vectors: s.vectors, pendingVectors: &pending}
+	if err := fn(tx, txStore); err != nil {
+		if rbErr := tx.Rollback(); rbErr != nil {
+			return fmt.Errorf("%w (rollback failed: %v)", err, rbErr)
+		}
+		return err
+	}
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("commit: %w", err)
+	}
+	for _, p := range pending {
+		s.updateIndex(p.id, p.vec)
+	}
+	return nil
+}
 
 // DB returns the underlying *sql.DB for shared access (e.g., by the graph engine).
 func (s *Store) DB() *sql.DB {

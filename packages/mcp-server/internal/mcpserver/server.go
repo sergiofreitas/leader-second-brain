@@ -2,7 +2,9 @@ package mcpserver
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log"
 	"time"
@@ -239,86 +241,121 @@ func (s *Server) HandleIngest(ctx context.Context, args map[string]interface{}) 
 	// Step 3: Generate embedding
 	embedding, _ := s.embedding.Embed(normalizedText)
 
-	// Step 4: Store memory in SQLite
 	memID := generateID("mem")
 	memType := extraction.MemoryType
 	if memType == "" {
 		memType = "observation"
 	}
-	if err := s.store.InsertMemory(
-		memID, memType, normalizedText, modality, "mcp", "", extraction.AboutPerson, 1.0,
-	); err != nil {
-		return nil, fmt.Errorf("store memory: %w", err)
-	}
 
-	// Step 5: Store embedding vector
-	if embedding != nil {
-		if err := s.store.InsertVector(memID, embedding); err != nil {
-			log.Printf("warning: could not store vector: %v", err)
-		}
-	}
-
-	// Step 6: Add persons to graph
-	for _, p := range extraction.Persons {
-		_, _ = s.ensurePerson(p.Name, p.Role)
-	}
-
-	// Step 7: Add memory node and edges to graph
-	_ = s.graph.AddNode("Memory", memID, map[string]interface{}{
-		"type": memType, "content": normalizedText,
-		"modality": modality, "created_at": time.Now().Format(time.RFC3339),
-	})
-
-	if extraction.AboutPerson != "" {
-		personID, err := s.ensurePerson(extraction.AboutPerson, "")
-		if err == nil {
-			_ = s.graph.AddEdge(memID, personID, "ABOUT", nil)
-		}
-	}
-
-	// Step 8: Add tasks to graph
-	for _, t := range extraction.Tasks {
-		taskID := generateID("task")
-		_ = s.store.InsertTask(taskID, t.Description, t.Owner, "pending")
-		_ = s.graph.AddNode("Task", taskID, map[string]interface{}{
-			"description": t.Description, "owner": t.Owner, "status": "pending",
-		})
-		_ = s.graph.AddEdge(taskID, memID, "DERIVED_FROM", nil)
-	}
-
-	// Step 9: If this is feedback, create feedback nodes and items
-	// The feedback format is driven by config — not hardcoded in the tool
+	// Steps 4-9 write the memory, its embedding and its graph in a single
+	// transaction: either everything is stored or nothing is. Extraction and
+	// embedding (above) stay outside so slow provider calls don't hold the
+	// write lock.
 	feedbackItemsCount := 0
-	if len(extraction.FeedbackItems) > 0 {
-		fbID := generateID("fb")
-		_ = s.graph.AddNode("Feedback", fbID, map[string]interface{}{
-			"type":       "detected",
-			"format":     s.cfg.Feedback.Format,
-			"created_at": time.Now().Format(time.RFC3339),
-			"source_memory": memID,
-		})
+	err = s.store.InTx(func(tx *sql.Tx, st *sqlite.Store) error {
+		g := s.graph.WithTx(tx)
 
-		// Connect memory -> feedback
-		_ = s.graph.AddEdge(memID, fbID, "FORMALIZED_IN", nil)
+		// Step 4: Store memory in SQLite
+		if err := st.InsertMemory(
+			memID, memType, normalizedText, modality, "mcp", "", extraction.AboutPerson, 1.0,
+		); err != nil {
+			return fmt.Errorf("store memory: %w", err)
+		}
 
-		// Connect feedback -> about_person
-		if extraction.AboutPerson != "" {
-			personID, err := s.store.GetPersonByName(extraction.AboutPerson)
-			if err == nil {
-				_ = s.graph.AddEdge(fbID, personID, "ABOUT", nil)
+		// Step 5: Store embedding vector
+		if embedding != nil {
+			if err := st.InsertVector(memID, embedding); err != nil {
+				return fmt.Errorf("store vector: %w", err)
 			}
 		}
 
-		// Create feedback items based on configured categories
-		for _, item := range extraction.FeedbackItems {
-			itemID := generateID("fi")
-			_ = s.graph.AddNode("FeedbackItem", itemID, map[string]interface{}{
-				"category": item.Category,
-				"content":  item.Content,
-			})
-			_ = s.graph.AddEdge(fbID, itemID, "CONTAINS", nil)
-			feedbackItemsCount++
+		// Step 6: Add persons to graph
+		for _, p := range extraction.Persons {
+			if _, err := ensurePerson(st, g, p.Name, p.Role); err != nil {
+				return err
+			}
 		}
+
+		// Step 7: Add memory node and edges to graph
+		if err := g.AddNode("Memory", memID, map[string]interface{}{
+			"type": memType, "content": normalizedText,
+			"modality": modality, "created_at": time.Now().Format(time.RFC3339),
+		}); err != nil {
+			return fmt.Errorf("add memory node: %w", err)
+		}
+
+		aboutPersonID := ""
+		if extraction.AboutPerson != "" {
+			personID, err := ensurePerson(st, g, extraction.AboutPerson, "")
+			if err != nil {
+				return err
+			}
+			if err := g.AddEdge(memID, personID, "ABOUT", nil); err != nil {
+				return err
+			}
+			aboutPersonID = personID
+		}
+
+		// Step 8: Add tasks to graph
+		for _, t := range extraction.Tasks {
+			taskID := generateID("task")
+			if err := st.InsertTask(taskID, t.Description, t.Owner, "pending"); err != nil {
+				return fmt.Errorf("store task: %w", err)
+			}
+			if err := g.AddNode("Task", taskID, map[string]interface{}{
+				"description": t.Description, "owner": t.Owner, "status": "pending",
+			}); err != nil {
+				return fmt.Errorf("add task node: %w", err)
+			}
+			if err := g.AddEdge(taskID, memID, "DERIVED_FROM", nil); err != nil {
+				return err
+			}
+		}
+
+		// Step 9: If this is feedback, create feedback nodes and items
+		// The feedback format is driven by config — not hardcoded in the tool
+		if len(extraction.FeedbackItems) > 0 {
+			fbID := generateID("fb")
+			if err := g.AddNode("Feedback", fbID, map[string]interface{}{
+				"type":          "detected",
+				"format":        s.cfg.Feedback.Format,
+				"created_at":    time.Now().Format(time.RFC3339),
+				"source_memory": memID,
+			}); err != nil {
+				return fmt.Errorf("add feedback node: %w", err)
+			}
+
+			// Connect memory -> feedback
+			if err := g.AddEdge(memID, fbID, "FORMALIZED_IN", nil); err != nil {
+				return err
+			}
+
+			// Connect feedback -> about_person
+			if aboutPersonID != "" {
+				if err := g.AddEdge(fbID, aboutPersonID, "ABOUT", nil); err != nil {
+					return err
+				}
+			}
+
+			// Create feedback items based on configured categories
+			for _, item := range extraction.FeedbackItems {
+				itemID := generateID("fi")
+				if err := g.AddNode("FeedbackItem", itemID, map[string]interface{}{
+					"category": item.Category,
+					"content":  item.Content,
+				}); err != nil {
+					return fmt.Errorf("add feedback item node: %w", err)
+				}
+				if err := g.AddEdge(fbID, itemID, "CONTAINS", nil); err != nil {
+					return err
+				}
+				feedbackItemsCount++
+			}
+		}
+		return nil
+	})
+	if err != nil {
+		return nil, fmt.Errorf("ingest: %w", err)
 	}
 
 	// Build result
@@ -466,15 +503,19 @@ func generateID(prefix string) string {
 
 // ensurePerson returns the ID of the person with the given name,
 // creating them in SQLite and in the graph if they don't exist yet
-func (s *Server) ensurePerson(name, role string) (string, error) {
-	if personID, err := s.store.GetPersonByName(name); err == nil {
+func ensurePerson(st *sqlite.Store, g graph.GraphEngine, name, role string) (string, error) {
+	personID, err := st.GetPersonByName(name)
+	if err == nil {
 		return personID, nil
 	}
-	personID := generateID("person")
-	if err := s.store.UpsertPerson(personID, name, role, "", "", 0); err != nil {
+	if !errors.Is(err, sql.ErrNoRows) {
+		return "", fmt.Errorf("find person %q: %w", name, err)
+	}
+	personID = generateID("person")
+	if err := st.UpsertPerson(personID, name, role, "", "", 0); err != nil {
 		return "", fmt.Errorf("upsert person: %w", err)
 	}
-	if err := s.graph.AddNode("Person", personID, map[string]interface{}{
+	if err := g.AddNode("Person", personID, map[string]interface{}{
 		"name": name, "role": role,
 	}); err != nil {
 		return "", fmt.Errorf("add person node: %w", err)

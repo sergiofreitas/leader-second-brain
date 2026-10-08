@@ -15,7 +15,19 @@ import (
 // It shares the store's *sql.DB, so there is a single connection pool and a
 // single write lock for the whole knowledge base.
 type SQLiteEngine struct {
-	db *sql.DB
+	q dbtx // the database, or a transaction (see WithTx)
+}
+
+// dbtx is the query interface shared by *sql.DB and *sql.Tx
+type dbtx interface {
+	Exec(query string, args ...interface{}) (sql.Result, error)
+	Query(query string, args ...interface{}) (*sql.Rows, error)
+	QueryRow(query string, args ...interface{}) *sql.Row
+}
+
+// WithTx returns a copy of the engine whose operations run inside tx
+func (g *SQLiteEngine) WithTx(tx *sql.Tx) GraphEngine {
+	return &SQLiteEngine{q: tx}
 }
 
 // NewSQLiteEngine creates the graph tables (if needed) on db.
@@ -44,7 +56,7 @@ func NewSQLiteEngine(db *sql.DB) (*SQLiteEngine, error) {
 			return nil, fmt.Errorf("init graph schema: %w", err)
 		}
 	}
-	return &SQLiteEngine{db: db}, nil
+	return &SQLiteEngine{q: db}, nil
 }
 
 // AddNode creates a node, or merges props into it if it already exists
@@ -53,7 +65,7 @@ func (g *SQLiteEngine) AddNode(label string, id string, props map[string]interfa
 	if err != nil {
 		return err
 	}
-	_, err = g.db.Exec(
+	_, err = g.q.Exec(
 		`INSERT INTO graph_nodes (id, label, props) VALUES (?, ?, ?)
 		 ON CONFLICT(id) DO UPDATE SET label = excluded.label, props = json_patch(props, excluded.props)`,
 		id, label, propsJSON,
@@ -64,7 +76,7 @@ func (g *SQLiteEngine) AddNode(label string, id string, props map[string]interfa
 // GetNode retrieves a node's properties (including its id) by label and id
 func (g *SQLiteEngine) GetNode(label string, id string) (map[string]interface{}, error) {
 	var propsJSON string
-	err := g.db.QueryRow(
+	err := g.q.QueryRow(
 		`SELECT props FROM graph_nodes WHERE id = ? AND label = ?`, id, label,
 	).Scan(&propsJSON)
 	if errors.Is(err, sql.ErrNoRows) {
@@ -82,7 +94,7 @@ func (g *SQLiteEngine) UpdateNode(label string, id string, props map[string]inte
 	if err != nil {
 		return err
 	}
-	_, err = g.db.Exec(
+	_, err = g.q.Exec(
 		`UPDATE graph_nodes SET props = json_patch(props, ?) WHERE id = ? AND label = ?`,
 		propsJSON, id, label,
 	)
@@ -91,7 +103,7 @@ func (g *SQLiteEngine) UpdateNode(label string, id string, props map[string]inte
 
 // DeleteNode removes a node; its edges go with it (ON DELETE CASCADE)
 func (g *SQLiteEngine) DeleteNode(label string, id string) error {
-	_, err := g.db.Exec(`DELETE FROM graph_nodes WHERE id = ? AND label = ?`, id, label)
+	_, err := g.q.Exec(`DELETE FROM graph_nodes WHERE id = ? AND label = ?`, id, label)
 	return err
 }
 
@@ -102,7 +114,7 @@ func (g *SQLiteEngine) AddEdge(from string, to string, label string, props map[s
 	if err != nil {
 		return err
 	}
-	_, err = g.db.Exec(
+	_, err = g.q.Exec(
 		`INSERT INTO graph_edges (from_id, to_id, label, props) VALUES (?, ?, ?, ?)
 		 ON CONFLICT(from_id, label, to_id) DO UPDATE SET props = json_patch(props, excluded.props)`,
 		from, to, label, propsJSON,
@@ -130,7 +142,7 @@ func (g *SQLiteEngine) GetEdgesTo(to string, label string) ([]EdgeResult, error)
 }
 
 func (g *SQLiteEngine) queryEdges(query string, args ...interface{}) ([]EdgeResult, error) {
-	rows, err := g.db.Query(query, args...)
+	rows, err := g.q.Query(query, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -173,7 +185,7 @@ func (g *SQLiteEngine) Traverse(startID string, edgeLabels []string, maxHops int
 		WHERE w.depth > 0
 		GROUP BY n.id
 		ORDER BY depth, n.id`
-	rows, err := g.db.Query(query, append([]interface{}{startID, startID, maxHops}, args...)...)
+	rows, err := g.q.Query(query, append([]interface{}{startID, startID, maxHops}, args...)...)
 	if err != nil {
 		return nil, fmt.Errorf("traverse: %w", err)
 	}
@@ -218,7 +230,7 @@ func (g *SQLiteEngine) QueryByPattern(pattern PatternQuery) ([]QueryResult, erro
 	}
 	query += ` ORDER BY t.id`
 
-	rows, err := g.db.Query(query, args...)
+	rows, err := g.q.Query(query, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -256,7 +268,7 @@ func (g *SQLiteEngine) neighbors(id, edgeLabel, nodeLabel string, outgoing bool,
 	}
 	query += ` ORDER BY ` + orderBy
 
-	rows, err := g.db.Query(query, id, edgeLabel, nodeLabel)
+	rows, err := g.q.Query(query, id, edgeLabel, nodeLabel)
 	if err != nil {
 		return nil, err
 	}
@@ -314,7 +326,7 @@ func (g *SQLiteEngine) GetPersonContext(personID string) (*PersonContext, error)
 // GetTeamHierarchy returns everyone reporting to a leader, directly or
 // indirectly (up to 5 levels), with their depth below the leader.
 func (g *SQLiteEngine) GetTeamHierarchy(leaderID string) ([]HierarchyNode, error) {
-	rows, err := g.db.Query(`
+	rows, err := g.q.Query(`
 		WITH RECURSIVE team(id, depth) AS (
 			SELECT ?, 0
 			UNION
