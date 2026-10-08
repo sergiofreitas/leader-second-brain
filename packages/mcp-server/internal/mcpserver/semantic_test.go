@@ -2,10 +2,15 @@ package mcpserver
 
 import (
 	"context"
+	"encoding/json"
+	"net/http"
+	"net/http/httptest"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/second-brain/second-brain/packages/mcp-server/internal/config"
+	"github.com/second-brain/second-brain/packages/mcp-server/internal/providers/embedding"
 	"github.com/second-brain/second-brain/packages/mcp-server/internal/store/sqlite"
 )
 
@@ -66,6 +71,68 @@ func TestUnsegmentedTranscriptIsSplit(t *testing.T) {
 	results, _ := found["results"].([]interface{})
 	if len(results) != 1 || !strings.Contains(results[0].(map[string]interface{})["excerpt"].(string), "pediu feedback") {
 		t.Errorf("search = %s, want the passage mentioning feedback", toJSON(found))
+	}
+}
+
+// TestSemanticSearchOverHTTP runs ingest → indexer → OpenAI-compatible
+// provider → semantic search against a fake embeddings API
+func TestSemanticSearchOverHTTP(t *testing.T) {
+	var mu sync.Mutex // the background indexer and indexNow may call concurrently
+	var inputs []string
+	api := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var req struct {
+			Input []string `json:"input"`
+		}
+		json.NewDecoder(r.Body).Decode(&req)
+		mu.Lock()
+		inputs = append(inputs, req.Input...)
+		mu.Unlock()
+		vectors, _ := keywordEmbedding{}.EmbedBatch(req.Input)
+		data := make([]map[string]interface{}, len(vectors))
+		for i, v := range vectors {
+			data[i] = map[string]interface{}{"index": i, "embedding": v}
+		}
+		json.NewEncoder(w).Encode(map[string]interface{}{"data": data})
+	}))
+	defer api.Close()
+
+	cfg := &config.Config{Graph: config.GraphConfig{Engine: "sqlite"}}
+	cfg.Storage.SQLite.Path = t.TempDir() + "/http.db"
+	srv, err := New(cfg)
+	if err != nil {
+		t.Fatalf("new server: %v", err)
+	}
+	defer srv.Close()
+	provider, err := embedding.NewOpenAI(embedding.OpenAIConfig{
+		BaseURL: api.URL + "/v1", Model: "multilingual-e5-small",
+		QueryPrefix: "query: ", DocumentPrefix: "passage: ",
+	})
+	if err != nil {
+		t.Fatalf("provider: %v", err)
+	}
+	if err := srv.EnableSemanticSearch(provider); err != nil {
+		t.Fatalf("enable: %v", err)
+	}
+
+	for _, content := range []string{
+		"O Sérgio não delega as revisões de código.",
+		"O Evandro vai tirar férias em dezembro.",
+	} {
+		call(t, "ingest", srv.HandleIngest, map[string]interface{}{"modality": "text", "content": content})
+	}
+	indexNow(t, srv)
+
+	found := call(t, "search_memories", srv.HandleSearchMemories, map[string]interface{}{
+		"query": "férias do time", "semantic": true, "limit": float64(1),
+	})
+	results, _ := found["results"].([]interface{})
+	if len(results) != 1 || !strings.Contains(toJSON(results[0]), "dezembro") {
+		t.Errorf("search = %s, want the vacation memory", toJSON(found))
+	}
+	mu.Lock()
+	defer mu.Unlock()
+	if !strings.Contains(strings.Join(inputs, "|"), "passage: O Sérgio") || inputs[len(inputs)-1] != "query: férias do time" {
+		t.Errorf("inputs sent = %q, want passages then the prefixed query", inputs)
 	}
 }
 

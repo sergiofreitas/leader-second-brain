@@ -44,7 +44,10 @@ type VLMProvider interface {
 
 // EmbeddingProvider generates vector embeddings for semantic search
 type EmbeddingProvider interface {
+	// Embed embeds a search query
 	Embed(text string) ([]float32, error)
+	// EmbedBatch embeds documents (memory chunks). Some models embed
+	// queries and documents differently (e.g. e5's "query: "/"passage: ").
 	EmbedBatch(texts []string) ([][]float32, error)
 	Dimensions() int
 	// Model identifies the model (and provider) that produced a vector.
