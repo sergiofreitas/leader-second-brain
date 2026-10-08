@@ -317,6 +317,44 @@ func (s *Store) SearchVector(queryVec []float32, limit int) ([]map[string]interf
 	return results, nil
 }
 
+// DeleteMemory deletes a memory with its passages and their embeddings, and
+// takes them out of the vector index (after the commit, inside a
+// transaction). The FTS index follows through the delete trigger. Reports
+// whether the memory existed.
+func (s *Store) DeleteMemory(id string) (bool, error) {
+	rows, err := s.q.Query(`SELECT id FROM memory_chunks WHERE memory_id = ?`, id)
+	if err != nil {
+		return false, err
+	}
+	var chunkIDs []int64
+	for rows.Next() {
+		var chunkID int64
+		if err := rows.Scan(&chunkID); err != nil {
+			rows.Close()
+			return false, err
+		}
+		chunkIDs = append(chunkIDs, chunkID)
+	}
+	rows.Close()
+	if err := rows.Err(); err != nil {
+		return false, err
+	}
+	// Chunks, embeddings, failures, topics and participants go with the
+	// memory (ON DELETE CASCADE)
+	res, err := s.q.Exec(`DELETE FROM memories WHERE id = ?`, id)
+	if err != nil {
+		return false, err
+	}
+	n, err := res.RowsAffected()
+	if err != nil || n == 0 {
+		return false, err
+	}
+	for _, chunkID := range chunkIDs {
+		s.updateIndex(chunkKey(chunkID), nil)
+	}
+	return true, nil
+}
+
 // updateIndex puts vec in the in-memory index (or removes the entry when vec
 // is nil). Inside a transaction the change is deferred until commit.
 func (s *Store) updateIndex(key string, vec []float32) {

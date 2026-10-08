@@ -164,6 +164,21 @@ func serve(args []string) {
 		},
 	)
 
+	// --- delete_memory ---
+	mcp.AddTool(server,
+		&mcp.Tool{
+			Name:        "delete_memory",
+			Description: "Delete a memory stored by mistake (about the wrong person, duplicated, wrong content), with what came from it: its feedback items and its tasks. People, relationships and topics are kept. It can't be undone, so: call it first without confirm — it only shows what would be deleted — show that to the user, and call again with confirm: true only after they agree. Memory ids are in recall (memories), search_memories results and ingest's result. To correct a memory, delete it and ingest it again.",
+		},
+		func(ctx context.Context, req *mcp.CallToolRequest, in deleteMemoryArgs) (*mcp.CallToolResult, any, error) {
+			result, err := sb.HandleDeleteMemory(ctx, map[string]interface{}{"memory_id": in.MemoryID, "confirm": in.Confirm})
+			if err != nil {
+				return nil, nil, err
+			}
+			return toCallToolResult(result), nil, nil
+		},
+	)
+
 	// --- recall ---
 	mcp.AddTool(server,
 		&mcp.Tool{
@@ -355,6 +370,11 @@ type renameArgs struct {
 
 type completeTaskArgs struct {
 	TaskID string `json:"task_id" jsonschema:"the task's id, from pending_tasks in recall or get_team_context"`
+}
+
+type deleteMemoryArgs struct {
+	MemoryID string `json:"memory_id" jsonschema:"the memory's id, from recall, search_memories or ingest"`
+	Confirm  bool   `json:"confirm,omitempty" jsonschema:"true only after the user saw what will be deleted and agreed; without it nothing is deleted"`
 }
 
 type searchArgs struct {

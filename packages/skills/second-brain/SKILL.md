@@ -24,6 +24,7 @@ who and what it is about, and send it already structured to `ingest`.
 | `ingest` | Store a memory with the entities you extracted |
 | `rename_person` | Give a known person a new name (their full name, a typo fix) |
 | `complete_task` | Mark a follow-up as done |
+| `delete_memory` | Delete a memory stored by mistake (always confirmed with the user) |
 | `recall` | Get the full context about a person for a situation |
 | `search_memories` | Find memories by subject, word or meaning |
 | `get_team_context` | Review a leader's team: each person and what they share |
@@ -84,6 +85,15 @@ values: fix it and call again.
 do Evandro", "marquei os 1:1s"), find it in `pending_tasks` of `recall` or
 `get_team_context` and call `complete_task` with its `id`. If what was done
 is worth remembering (how the evaluation went), also `ingest` it.
+
+**Mistakes.** When the user says something was recorded wrong (about the
+wrong person, duplicated, wrong data): find its `memory_id` (in `recall`'s
+memories, `search_memories` or the `ingest` result), call `delete_memory`
+**without** `confirm`, show the user what it would delete — the memory, its
+feedback items and the tasks that came from it — and only after they agree
+call it again with `confirm: true`. To correct a memory, delete it and
+ingest it again. People, relationships and topics stay; a wrong name is
+fixed with `rename_person`.
 
 ### Example
 

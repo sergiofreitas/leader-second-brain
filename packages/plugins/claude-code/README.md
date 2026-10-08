@@ -46,6 +46,7 @@ team and recall it before 1:1s, PDIs and feedback sessions.
 | `list_people` | Known people, to reuse their stored names |
 | `rename_person` | Rename a known person (full name, typo fix) |
 | `complete_task` | Mark a follow-up as done |
+| `delete_memory` | Delete a memory stored by mistake (preview, then confirm) |
 | `recall` | Context about a person for a 1:1, PDI, feedback... |
 | `get_team_context` | Team review: each person, shared topics, the leader's pending tasks |
 | `search_memories` | Search by keyword (plus synonyms) and, if configured, by meaning |

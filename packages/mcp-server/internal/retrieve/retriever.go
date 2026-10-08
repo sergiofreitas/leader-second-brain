@@ -74,6 +74,9 @@ func (r *HybridRetriever) AssembleBriefing(
 		memories := make([]map[string]interface{}, 0, len(personCtx.Memories))
 		for _, m := range personCtx.Memories {
 			entry := map[string]interface{}{}
+			if id, ok := m["id"].(string); ok {
+				entry["memory_id"] = id // for delete_memory
+			}
 			if t, ok := m["type"].(string); ok {
 				entry["type"] = t
 			}
