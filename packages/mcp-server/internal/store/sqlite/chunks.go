@@ -216,26 +216,33 @@ func (s *Store) UseEmbeddingModel(model string) error {
 }
 
 // EmbeddingStatus counts the chunks embedded with model, still pending,
-// and given up after too many failures
+// and given up after too many failures, with the error of the most recent
+// failure still unresolved
 type EmbeddingStatus struct {
-	Chunks   int `json:"chunks"`
-	Embedded int `json:"embedded"`
-	Pending  int `json:"pending"`
-	Failed   int `json:"failed"`
+	Chunks    int    `json:"chunks"`
+	Embedded  int    `json:"embedded"`
+	Pending   int    `json:"pending"`
+	Failed    int    `json:"failed"`
+	LastError string `json:"last_error,omitempty"`
 }
 
 // GetEmbeddingStatus returns the indexing progress for model
 func (s *Store) GetEmbeddingStatus(model string) (EmbeddingStatus, error) {
 	var st EmbeddingStatus
+	var lastError sql.NullString
 	err := s.q.QueryRow(
 		`SELECT
 			(SELECT count(*) FROM memory_chunks),
 			(SELECT count(*) FROM chunk_embeddings WHERE model = ?),
 			(SELECT count(*) FROM embedding_failures f WHERE f.model = ? AND f.attempts >= ?
-			   AND NOT EXISTS (SELECT 1 FROM chunk_embeddings e WHERE e.chunk_id = f.chunk_id AND e.model = f.model))`,
-		model, model, MaxEmbeddingAttempts,
-	).Scan(&st.Chunks, &st.Embedded, &st.Failed)
+			   AND NOT EXISTS (SELECT 1 FROM chunk_embeddings e WHERE e.chunk_id = f.chunk_id AND e.model = f.model)),
+			(SELECT f.last_error FROM embedding_failures f WHERE f.model = ?
+			   AND NOT EXISTS (SELECT 1 FROM chunk_embeddings e WHERE e.chunk_id = f.chunk_id AND e.model = f.model)
+			 ORDER BY f.next_attempt_at DESC LIMIT 1)`,
+		model, model, MaxEmbeddingAttempts, model,
+	).Scan(&st.Chunks, &st.Embedded, &st.Failed, &lastError)
 	st.Pending = st.Chunks - st.Embedded - st.Failed
+	st.LastError = lastError.String
 	return st, err
 }
 

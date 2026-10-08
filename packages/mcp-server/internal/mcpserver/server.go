@@ -12,6 +12,7 @@ import (
 	"github.com/second-brain/second-brain/packages/mcp-server/internal/config"
 	"github.com/second-brain/second-brain/packages/mcp-server/internal/indexer"
 	"github.com/second-brain/second-brain/packages/mcp-server/internal/providers"
+	"github.com/second-brain/second-brain/packages/mcp-server/internal/providers/embedding"
 	"github.com/second-brain/second-brain/packages/mcp-server/internal/retrieve"
 	"github.com/second-brain/second-brain/packages/mcp-server/internal/store/graph"
 	"github.com/second-brain/second-brain/packages/mcp-server/internal/store/sqlite"
@@ -75,6 +76,22 @@ func New(cfg *config.Config) (*Server, error) {
 		llm:       llm,
 		retriever: retrieve.NewHybridRetriever(store, graphEngine, nil),
 		adapter:   adapters.NewAdapter(cfg.Feedback.TargetSystem),
+	}
+
+	// Semantic search only when an embedding provider is configured: by
+	// default nothing leaves the machine through the server
+	embedder, err := embedding.New(cfg.Providers.Embedding)
+	if err != nil {
+		store.Close()
+		return nil, err
+	}
+	if embedder == nil {
+		log.Printf("Semantic search: disabled (no embedding provider configured)")
+		return s, nil
+	}
+	if err := s.EnableSemanticSearch(embedder); err != nil {
+		store.Close()
+		return nil, fmt.Errorf("enable semantic search: %w", err)
 	}
 	return s, nil
 }
@@ -264,12 +281,20 @@ func (s *Server) HandleSearchMemories(ctx context.Context, args map[string]inter
 		return nil, fmt.Errorf("search: %w", err)
 	}
 
-	resultJSON, _ := json.MarshalIndent(map[string]interface{}{
+	out := map[string]interface{}{
 		"query":   query,
 		"mode":    map[bool]string{true: "semantic", false: "keyword"}[semantic],
 		"count":   len(results),
 		"results": results,
-	}, "", "  ")
+	}
+	// Recent memories may not be embedded yet, or the provider may be
+	// failing (wrong key, gateway down): say so, so the host can explain
+	if semantic {
+		if status, err := s.indexer.Status(); err == nil && (status.Pending > 0 || status.Failed > 0 || status.LastError != "") {
+			out["index_status"] = status
+		}
+	}
+	resultJSON, _ := json.MarshalIndent(out, "", "  ")
 
 	return &ToolResult{
 		Content: []ContentBlock{{Type: "text", Text: string(resultJSON)}},

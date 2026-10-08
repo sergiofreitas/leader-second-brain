@@ -18,14 +18,15 @@ providers:
   transcription: "host"
   ocr: "host"
   vlm: "host"
-  embedding: "local:sentence_transformers"
   llm: "host"
 
-  local:
-    sentence_transformers:
-      model: "all-MiniLM-L6-v2"
-      device: "cpu"
-      dimensions: 384
+  # Semantic search through the company's LiteLLM gateway, which applies
+  # the LGPD controls on what reaches each AI provider
+  embedding:
+    provider: openai-compatible
+    base_url: "${SAIPOS_LITELLM_URL}"          # e.g. https://<gateway>/v1
+    model: "text-embedding-3-small"             # the model name configured in LiteLLM
+    api_key: "${SECOND_BRAIN_EMBEDDING_KEY}"
 
 transport:
   type: stdio

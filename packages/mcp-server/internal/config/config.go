@@ -35,17 +35,47 @@ type StorageConfig struct {
 
 // ProvidersConfig defines which AI providers to use
 type ProvidersConfig struct {
-	Transcription string `yaml:"transcription"`
-	OCR           string `yaml:"ocr"`
-	VLM           string `yaml:"vlm"`
-	Embedding     string `yaml:"embedding"`
-	LLM           string `yaml:"llm"`
+	Transcription string          `yaml:"transcription"`
+	OCR           string          `yaml:"ocr"`
+	VLM           string          `yaml:"vlm"`
+	Embedding     EmbeddingConfig `yaml:"embedding"`
+	LLM           string          `yaml:"llm"`
 
 	// Provider-specific options
 	OpenAI    map[string]interface{} `yaml:"openai,omitempty"`
 	Anthropic map[string]interface{} `yaml:"anthropic,omitempty"`
-	Toqan     map[string]interface{} `yaml:"toqan,omitempty"`
 	Local     map[string]interface{} `yaml:"local,omitempty"`
+}
+
+// EmbeddingConfig selects the embedding provider used for semantic search.
+// Without one, semantic search is off and nothing is sent anywhere.
+//
+//	embedding: none                 # short form
+//	embedding:
+//	  provider: openai-compatible   # none | openai | ollama | openai-compatible
+//	  base_url: https://litellm.example.com/v1
+//	  model: text-embedding-3-small
+//	  api_key: ${SECOND_BRAIN_EMBEDDING_KEY}
+type EmbeddingConfig struct {
+	Provider       string            `yaml:"provider"`
+	BaseURL        string            `yaml:"base_url"`
+	Model          string            `yaml:"model"`
+	APIKey         string            `yaml:"api_key"`
+	Dimensions     int               `yaml:"dimensions"`
+	QueryPrefix    string            `yaml:"query_prefix"`
+	DocumentPrefix string            `yaml:"document_prefix"`
+	Headers        map[string]string `yaml:"headers"`
+	BatchSize      int               `yaml:"batch_size"`
+	TimeoutSeconds int               `yaml:"timeout_seconds"`
+}
+
+// UnmarshalYAML accepts the short form (`embedding: none`) as well as a block
+func (e *EmbeddingConfig) UnmarshalYAML(value *yaml.Node) error {
+	if value.Kind == yaml.ScalarNode {
+		return value.Decode(&e.Provider)
+	}
+	type plain EmbeddingConfig // no UnmarshalYAML: avoids recursion
+	return value.Decode((*plain)(e))
 }
 
 // TransportConfig defines how the MCP server communicates

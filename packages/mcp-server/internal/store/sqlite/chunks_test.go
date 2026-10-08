@@ -67,7 +67,7 @@ func TestEmbeddingQueue(t *testing.T) {
 		t.Error("a given-up chunk still has a retry scheduled")
 	}
 	status, err := s.GetEmbeddingStatus("m1")
-	if err != nil || status != (EmbeddingStatus{Chunks: 3, Embedded: 2, Pending: 0, Failed: 1}) {
+	if err != nil || status != (EmbeddingStatus{Chunks: 3, Embedded: 2, Pending: 0, Failed: 1, LastError: "rate limited"}) {
 		t.Errorf("status = %+v (err %v)", status, err)
 	}
 

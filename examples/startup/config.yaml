@@ -12,28 +12,17 @@ storage:
     retention_days: 180
 
 providers:
-  transcription: "local:whisper"
-  ocr: "local:tesseract"
-  vlm: "cloud:openai"
-  embedding: "local:sentence_transformers"
-  llm: "cloud:openai"
+  # The MCP host transcribes, describes and extracts entities
+  transcription: "host"
+  ocr: "host"
+  vlm: "host"
+  llm: "host"
 
-  local:
-    whisper:
-      model: "base"
-      device: "cpu"
-    tesseract:
-      language: "eng"
-    sentence_transformers:
-      model: "all-MiniLM-L6-v2"
-      device: "cpu"
-      dimensions: 384
-
-  openai:
+  # Semantic search with OpenAI embeddings: memory text is sent to OpenAI
+  embedding:
+    provider: openai
+    model: "text-embedding-3-small"
     api_key: "${OPENAI_API_KEY}"
-    models:
-      vlm: "gpt-4o"
-      llm: "gpt-4o-mini"
 
 transport:
   type: stdio

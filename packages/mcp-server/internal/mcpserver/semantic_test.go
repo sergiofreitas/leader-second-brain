@@ -136,6 +136,30 @@ func TestSemanticSearchOverHTTP(t *testing.T) {
 	}
 }
 
+// TestEmbeddingFromConfig checks New enables semantic search from the config,
+// and refuses to start with an invalid provider
+func TestEmbeddingFromConfig(t *testing.T) {
+	cfg := &config.Config{Graph: config.GraphConfig{Engine: "sqlite"}}
+	cfg.Storage.SQLite.Path = t.TempDir() + "/cfg.db"
+	cfg.Providers.Embedding = config.EmbeddingConfig{
+		Provider: "openai-compatible", BaseURL: "http://127.0.0.1:1/v1", Model: "text-embedding-3-small",
+	}
+	srv, err := New(cfg)
+	if err != nil {
+		t.Fatalf("new server: %v", err)
+	}
+	if srv.indexer == nil || srv.indexer.Model() != "text-embedding-3-small" {
+		t.Errorf("semantic search not enabled from the config")
+	}
+	srv.Close()
+
+	cfg.Storage.SQLite.Path = t.TempDir() + "/bad.db"
+	cfg.Providers.Embedding = config.EmbeddingConfig{Provider: "local:sentence_transformers"}
+	if _, err := New(cfg); err == nil || !strings.Contains(err.Error(), "unknown embedding provider") {
+		t.Errorf("New with an unknown provider = %v", err)
+	}
+}
+
 // TestSemanticSearchDisabled checks the server works without an embedding
 // provider and says so when semantic search is asked for
 func TestSemanticSearchDisabled(t *testing.T) {

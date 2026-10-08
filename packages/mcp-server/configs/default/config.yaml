@@ -12,28 +12,17 @@ storage:
     retention_days: 365
 
 providers:
-  # Default: local providers (zero API keys, works offline)
-  transcription: "local:whisper"
-  ocr: "local:tesseract"
-  vlm: "local:ollama"
-  embedding: "local:sentence_transformers"
-  llm: "local:ollama"
+  # The MCP host transcribes, describes and extracts entities
+  transcription: "host"
+  ocr: "host"
+  vlm: "host"
+  llm: "host"
 
-  local:
-    whisper:
-      model: "base"           # tiny | base | small | medium | large
-      device: "cpu"            # cpu | cuda | metal
-    tesseract:
-      language: "por"          # ISO 639-2
-    sentence_transformers:
-      model: "all-MiniLM-L6-v2"
-      device: "cpu"
-      dimensions: 384
-    ollama:
-      endpoint: "http://localhost:11434"
-      models:
-        llm: "llama3.2"
-        vlm: "llava"
+  # Semantic search is off by default: nothing is sent anywhere and search
+  # is by keyword. To turn it on, pick a provider (see docs/configuration.md):
+  #   embedding: { provider: ollama, model: bge-m3 }                     # local
+  #   embedding: { provider: openai, api_key: "${OPENAI_API_KEY}" }      # cloud
+  embedding: none
 
 transport:
   type: stdio

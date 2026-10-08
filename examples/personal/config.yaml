@@ -12,27 +12,17 @@ storage:
     retention_days: 90
 
 providers:
-  transcription: "local:whisper"
-  ocr: "local:tesseract"
-  vlm: "local:ollama"
-  embedding: "local:sentence_transformers"
-  llm: "local:ollama"
+  # The MCP host transcribes, describes and extracts entities
+  transcription: "host"
+  ocr: "host"
+  vlm: "host"
+  llm: "host"
 
-  local:
-    whisper:
-      model: "tiny"
-      device: "cpu"
-    tesseract:
-      language: "eng"
-    sentence_transformers:
-      model: "all-MiniLM-L6-v2"
-      device: "cpu"
-      dimensions: 384
-    ollama:
-      endpoint: "http://localhost:11434"
-      models:
-        llm: "llama3.2"
-        vlm: "llava"
+  # Semantic search with a local model served by Ollama: nothing leaves the
+  # machine. Run `ollama pull bge-m3` first (multilingual, ~1.2 GB).
+  embedding:
+    provider: ollama
+    model: "bge-m3"
 
 transport:
   type: stdio
