@@ -127,7 +127,7 @@ skills:
 
 ## Example profiles
 
-See `examples/` directory:
-- `saipos/` — Saipos internal (host extraction, embeddings through the LiteLLM gateway, Qulture, stop/start/continue)
-- `startup/` — Generic startup (host extraction, OpenAI embeddings, freeform)
-- `personal/` — Minimal personal (host extraction, local Ollama embeddings, freeform)
+Built-in profiles (`second-brain init --profile NAME`, see `packages/mcp-server/configs/profiles/`):
+- `saipos` — Saipos internal (host extraction, embeddings through the LiteLLM gateway, Qulture, stop/start/continue)
+- `startup` — Generic startup (host extraction, OpenAI embeddings, freeform)
+- `personal` — Minimal personal (host extraction, local Ollama embeddings, freeform)

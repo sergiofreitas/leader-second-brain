@@ -16,22 +16,37 @@ Every `git tag v*` triggers the GitHub Actions workflow that cross-compiles the 
 | macOS ARM64 | `second-brain-darwin-arm64` |
 | Windows AMD64 | `second-brain-windows-amd64.exe` |
 
-Users download from the GitHub Releases page and place in their PATH.
+The workflow runs the tests first, builds with the version stamped in
+(`second-brain version`), and publishes a `checksums.txt` (SHA-256) with the
+binaries.
+
+### Install scripts (recommended)
+
+`install.ps1` (Windows) and `install.sh` (macOS, Linux) at the repository
+root download the binary for the platform, verify it against
+`checksums.txt`, and install it in `~/.second-brain/bin` — on Windows also
+adding it to the user PATH. Options, as environment variables:
+
+| Variable | Effect |
+|---|---|
+| `SECOND_BRAIN_VERSION` | install this release tag instead of the latest |
+| `SECOND_BRAIN_INSTALL_DIR` | install somewhere else |
+| `SECOND_BRAIN_NO_MODIFY_PATH=1` | leave the PATH alone (Windows) |
+| `SECOND_BRAIN_BASE_URL` | download from a mirror of the release files |
+| `SECOND_BRAIN_BINARY` | install a local file (to test a build before releasing it) |
+
+Plugins can't ship the binary: harnesses copy plugins as plain folders,
+with no install step, and binaries are per platform. So the binary is
+installed once, on the PATH, and every harness starts it as `second-brain`.
 
 ### Build from source
 
 ```bash
-git clone https://github.com/second-brain/second-brain.git
-cd second-brain
+git clone https://github.com/sergiofreitas/leader-second-brain.git
+cd leader-second-brain
 make build        # current platform
 make build-all    # all 5 platforms
 make install      # build + copy to /usr/local/bin
-```
-
-### Homebrew (future)
-
-```bash
-brew install second-brain/tap/second-brain
 ```
 
 ## 2. Harness plugins
@@ -40,22 +55,31 @@ Each harness has its own plugin distribution mechanism:
 
 ### Claude Code
 
-**Marketplace (recommended):**
+The repository is itself a Claude Code marketplace
+(`.claude-plugin/marketplace.json`), listing the plugin in
+`packages/plugins/claude-code`:
 
 ```bash
-# Add the marketplace
-claude plugin marketplace add second-brain/second-brain
-
-# Install the plugin
-claude plugin install second-brain
+claude plugin marketplace add sergiofreitas/leader-second-brain
+claude plugin install second-brain@second-brain
 ```
 
-Or manual:
+The plugin has its manifest in `.claude-plugin/plugin.json`, the MCP server
+in `.mcp.json` (`"command": "second-brain"`), the skills in `skills/` and two
+commands in `commands/`. Claude Code copies a plugin into its cache on
+install and the plugin can't reference files outside its folder, so
+`skills/` is a copy of `packages/skills`, kept in sync with
+`make sync-skills` and checked by `make check-skills` in the release
+workflow. Bump `version` in `plugin.json` on each release, so installed
+plugins update.
+
+Check before publishing:
+
 ```bash
-claude plugin install /path/to/second-brain/packages/plugins/claude-code
+claude plugin validate packages/plugins/claude-code --strict
+claude plugin validate . --strict          # the marketplace
+claude --plugin-dir packages/plugins/claude-code   # try it in a session
 ```
-
-The `marketplace.json` at `packages/plugins/claude-code/marketplace.json` lists the plugin. The `plugin.json` and `.mcp.json` configure the MCP server launch.
 
 ### OpenAI Codex
 
@@ -63,7 +87,7 @@ The `marketplace.json` at `packages/plugins/claude-code/marketplace.json` lists 
 
 ```bash
 # Add the marketplace
-codex plugin marketplace add second-brain/second-brain
+codex plugin marketplace add sergiofreitas/leader-second-brain
 
 # Install the plugin
 codex plugin add second-brain
@@ -74,7 +98,6 @@ Or manual via `~/.codex/config.toml`:
 ```toml
 [mcp_servers.second-brain]
 command = "second-brain"
-args = ["--config", "~/.second-brain/config.yaml"]
 ```
 
 The `marketplace.json` at `packages/plugins/codex/marketplace.json` lists the plugin.
@@ -90,7 +113,7 @@ The `marketplace.json` at `packages/plugins/codex/marketplace.json` lists the pl
   "mcp": {
     "second-brain": {
       "type": "local",
-      "command": ["second-brain", "--config", "~/.second-brain/config.yaml"],
+      "command": ["second-brain"],
       "enabled": true
     }
   }
@@ -108,43 +131,43 @@ Add MCP config to `opencode.json` as shown above.
 
 ## 3. Configuration profiles
 
-Users copy a profile from `examples/` to `~/.second-brain/config.yaml`:
+The profiles live in `packages/mcp-server/configs/profiles/` and are
+embedded in the binary; `second-brain init` writes one to
+`~/.second-brain/config.yaml`:
 
 ```bash
-# Saipos (host extraction + Qulture)
-cp examples/saipos/config.yaml ~/.second-brain/config.yaml
-
-# Startup (hybrid + freeform)
-cp examples/startup/config.yaml ~/.second-brain/config.yaml
-
-# Personal (all-local, minimal)
-cp examples/personal/config.yaml ~/.second-brain/config.yaml
+second-brain init                                     # default: keyword search only, nothing sent anywhere
+second-brain init --profile saipos                    # stop/start/continue, Qulture, LiteLLM gateway
+second-brain init --profile saipos --embedding openai # same, with OpenAI embeddings
+second-brain init --profile startup                   # freeform, OpenAI embeddings
+second-brain init --profile personal                  # freeform, local Ollama embeddings
 ```
+
+`--embedding none|openai|ollama` replaces the profile's semantic search
+provider and keeps the rest; `--force` overwrites an existing config.
+Without any config the server runs with the `default` settings.
 
 ## 4. First-run experience
 
 ```bash
-# 1. Install the binary
-make install   # or download from GitHub Releases
+# 1. Install the binary (Windows: irm .../install.ps1 | iex)
+curl -fsSL https://raw.githubusercontent.com/sergiofreitas/leader-second-brain/main/install.sh | sh
 
-# 2. Copy a config
-mkdir -p ~/.second-brain
-cp examples/personal/config.yaml ~/.second-brain/config.yaml
+# 2. Optionally, write a config (it lists the env vars it needs)
+second-brain init --profile saipos
 
-# 3. Install the harness plugin (pick one)
-claude plugin marketplace add second-brain/second-brain && claude plugin install second-brain
-# or
-codex plugin marketplace add second-brain/second-brain && codex plugin add second-brain
-# or
-# Add to opencode.json (see above)
+# 3. Install the harness plugin
+claude plugin marketplace add sergiofreitas/leader-second-brain
+claude plugin install second-brain@second-brain
 
-# 4. Start using
-# Open your harness and say: "Anotei que o Evandro resolveu sozinho um bug de TEF"
+# 4. Restart the harness and start using it:
+#    "Anotei que o Evandro resolveu sozinho um bug de TEF"
 ```
 
 ## 5. Versioning
 
 - Binary and plugins share the same version (git tags: `v0.1.0`, `v0.2.0`, etc.)
-- GitHub Releases include the cross-compiled binaries for each tag
-- Plugin marketplaces point to the same repository, so `plugin install` always gets the latest
+- GitHub Releases include the cross-compiled binaries and `checksums.txt` for each tag
+- Plugin marketplaces point to the same repository; bump the plugin's
+  `version` with each release so installed plugins update
 - npm package (OpenCode) is published separately with the same version

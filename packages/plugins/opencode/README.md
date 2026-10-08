@@ -54,7 +54,7 @@ plugins in that directory.
 2. Copy a config:
    ```bash
    mkdir -p ~/.second-brain
-   cp examples/saipos/config.yaml ~/.second-brain/config.yaml
+   second-brain init --profile saipos
    ```
 
 3. Add skills to `.opencode/skills/`:

@@ -24,54 +24,83 @@ second-brain/
 │       ├── codex/            OpenAI Codex plugin (plugin.json + mcp.json + AGENTS.md)
 │       └── opencode/         OpenCode plugin (opencode.json + .opencode/)
 │
-├── examples/                Configuration profiles per organization
-│   ├── saipos/              Host extraction, Qulture integration
-│   ├── startup/             Hybrid (local + OpenAI)
-│   └── personal/            Minimal, all-local, zero API keys
-│
+├── .claude-plugin/           Claude Code marketplace (lists the plugin)
+├── install.ps1 / install.sh  Binary installers (Windows / macOS, Linux)
 ├── docs/                    Documentation
 ├── Makefile                 Build, test, install, cross-compile
 └── README.md
 ```
 
-## Quick start
+Configuration profiles (`default`, `saipos`, `startup`, `personal`) live in
+`packages/mcp-server/configs/profiles/` and are embedded in the binary.
+
+## Install
+
+### 1. The binary
+
+**Windows** (PowerShell):
+
+```powershell
+irm https://raw.githubusercontent.com/sergiofreitas/leader-second-brain/main/install.ps1 | iex
+```
+
+**macOS / Linux**:
 
 ```bash
-# Build the MCP server (CGO-free)
-make build
+curl -fsSL https://raw.githubusercontent.com/sergiofreitas/leader-second-brain/main/install.sh | sh
+```
 
-# Run tests
+The installer downloads the binary for your platform from the latest GitHub
+release, checks its SHA-256 against the release's `checksums.txt`, and puts
+it in `~/.second-brain/bin` (added to your PATH on Windows; the script tells
+you how on macOS/Linux). Run `second-brain version` to check.
+
+### 2. A config (optional)
+
+Without a config the server uses the defaults: data in `~/.second-brain/`,
+search by keyword, nothing sent anywhere. To pick a profile or turn on
+semantic search:
+
+```bash
+second-brain init --profile saipos                    # stop/start/continue, Qulture, LiteLLM gateway
+second-brain init --profile saipos --embedding openai # same, with OpenAI embeddings
+second-brain init --help                              # all profiles and options
+```
+
+`init` tells you which environment variables the config reads (API keys)
+and whether they are set. See [docs/configuration.md](docs/configuration.md).
+
+### 3. The plugin for your harness
+
+**Claude Code**:
+
+```bash
+claude plugin marketplace add sergiofreitas/leader-second-brain
+claude plugin install second-brain@second-brain
+```
+
+Restart Claude Code, then try: *"Anota que o Evandro resolveu sozinho um bug
+de TEF hoje"* or `/second-brain:briefing Evandro`.
+
+### Build from source
+
+```bash
+make build    # CGO-free binary at ./second-brain
 make test
-
-# Install
-make install
-
-# Copy a config profile
-mkdir -p ~/.second-brain
-cp examples/saipos/config.yaml ~/.second-brain/config.yaml
+make install  # copies it to /usr/local/bin
 ```
 
-## Harness plugins
+## Other harnesses
 
-### Claude Code
-
-```bash
-claude plugin install github.com/second-brain/second-brain/packages/plugins/claude-code
-```
-
-Or manual: see `packages/plugins/claude-code/README.md`
+Install the binary and (optionally) a config as above, then register the MCP
+server. It reads `~/.second-brain/config.yaml` by default.
 
 ### OpenAI Codex
 
-```bash
-codex plugin install github.com/second-brain/second-brain/packages/plugins/codex
-```
-
-Or add to `~/.codex/config.toml`:
+Add to `~/.codex/config.toml`:
 ```toml
 [mcp_servers.second-brain]
 command = "second-brain"
-args = ["--config", "~/.second-brain/config.yaml"]
 ```
 
 See `packages/plugins/codex/README.md`
@@ -85,7 +114,7 @@ Add to `opencode.json`:
   "mcp": {
     "second-brain": {
       "type": "local",
-      "command": ["second-brain", "--config", "~/.second-brain/config.yaml"],
+      "command": ["second-brain"],
       "enabled": true
     }
   }

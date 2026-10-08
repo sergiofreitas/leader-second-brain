@@ -7,7 +7,7 @@ A leadership memory plugin for OpenAI Codex.
 ### Option A: Codex CLI
 
 ```bash
-codex plugin install github.com/second-brain/second-brain/packages/plugins/codex
+codex plugin install github.com/sergiofreitas/leader-second-brain/packages/plugins/codex
 ```
 
 ### Option B: Manual config
@@ -41,7 +41,7 @@ args = ["--config", ".second-brain/config.yaml"]
 2. Copy a config:
    ```bash
    mkdir -p ~/.second-brain
-   cp examples/saipos/config.yaml ~/.second-brain/config.yaml
+   second-brain init --profile saipos
    ```
 
 3. Add to your `AGENTS.md`:
