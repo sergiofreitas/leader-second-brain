@@ -1,6 +1,6 @@
 {
   "name": "second-brain",
-  "version": "0.2.1",
+  "version": "0.3.0",
   "description": "Memory for leadership: capture what you observe about your team and recall it before 1:1s, PDIs and feedback sessions. Requires the second-brain binary (see the repository's install instructions).",
   "author": {
     "name": "Sérgio Freitas"
