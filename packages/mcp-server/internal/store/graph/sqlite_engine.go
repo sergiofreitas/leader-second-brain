@@ -125,18 +125,20 @@ func (g *SQLiteEngine) AddEdge(from string, to string, label string, props map[s
 	return nil
 }
 
-// GetEdges returns all edges of the given label starting from 'from'
+// GetEdges returns all edges of the given label starting from 'from', in the
+// order they were added (IDs made in the same clock tick don't sort by time)
 func (g *SQLiteEngine) GetEdges(from string, label string) ([]EdgeResult, error) {
 	return g.queryEdges(
-		`SELECT from_id, to_id, label, props FROM graph_edges WHERE from_id = ? AND label = ? ORDER BY to_id`,
+		`SELECT from_id, to_id, label, props FROM graph_edges WHERE from_id = ? AND label = ? ORDER BY rowid`,
 		from, label,
 	)
 }
 
-// GetEdgesTo returns all edges of the given label pointing to 'to'
+// GetEdgesTo returns all edges of the given label pointing to 'to', in the
+// order they were added
 func (g *SQLiteEngine) GetEdgesTo(to string, label string) ([]EdgeResult, error) {
 	return g.queryEdges(
-		`SELECT from_id, to_id, label, props FROM graph_edges WHERE to_id = ? AND label = ? ORDER BY from_id`,
+		`SELECT from_id, to_id, label, props FROM graph_edges WHERE to_id = ? AND label = ? ORDER BY rowid`,
 		to, label,
 	)
 }
@@ -264,7 +266,7 @@ func (g *SQLiteEngine) neighbors(id, edgeLabel, nodeLabel string, outgoing bool,
 		query += ` AND ` + where
 	}
 	if orderBy == "" {
-		orderBy = "n.id"
+		orderBy = "e.rowid"
 	}
 	query += ` ORDER BY ` + orderBy
 

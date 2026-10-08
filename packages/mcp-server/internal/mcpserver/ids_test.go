@@ -28,6 +28,33 @@ func TestGenerateIDIsUniqueWithinOneClockTick(t *testing.T) {
 	}
 }
 
+// TestFeedbackItemsKeepTheirOrder checks recall lists feedback items in the
+// order they were given, even when their IDs share a timestamp
+func TestFeedbackItemsKeepTheirOrder(t *testing.T) {
+	freezeClock(t)
+	srv := newTestServer(t)
+	items := []providers.ExtractedFeedbackItem{
+		{Category: "stop", Content: "Parar 1"}, {Category: "start", Content: "Começar 1"},
+		{Category: "start", Content: "Começar 2"}, {Category: "continue", Content: "Continuar 1"},
+		{Category: "continue", Content: "Continuar 2"},
+	}
+	call(t, "ingest", srv.HandleIngest, map[string]interface{}{
+		"modality": "text", "content": "Feedback da Ana.", "about_person": "Ana",
+		"extraction": &providers.EntityExtraction{MemoryType: "feedback", FeedbackItems: items},
+	})
+	brief := call(t, "recall", srv.HandleRecall, map[string]interface{}{"person_name": "Ana", "context": "feedback"})
+	feedbacks, _ := brief["feedbacks"].([]interface{})
+	if len(feedbacks) != 1 {
+		t.Fatalf("feedbacks = %s", toJSON(brief["feedbacks"]))
+	}
+	got := feedbacks[0].(map[string]interface{})["items"].([]interface{})
+	for i, item := range got {
+		if content := item.(map[string]interface{})["content"]; content != items[i].Content {
+			t.Errorf("item %d = %v, want %q (items in the order given)", i, content, items[i].Content)
+		}
+	}
+}
+
 // TestIngestCreatesEveryNewPerson ingests a team structure naming several
 // new people at once: each of them must be stored, none replacing another
 func TestIngestCreatesEveryNewPerson(t *testing.T) {
