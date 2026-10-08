@@ -6,7 +6,27 @@ on:
       - 'v*'
 
 jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: packages/mcp-server/go.mod
+          cache-dependency-path: packages/mcp-server/go.sum
+
+      - name: Test
+        run: |
+          cd packages/mcp-server
+          go vet ./...
+          go test -race ./...
+
+      - name: Plugin skills are in sync
+        run: make check-skills
+
   build:
+    needs: test
     runs-on: ubuntu-latest
     strategy:
       matrix:
@@ -31,7 +51,8 @@ jobs:
           CGO_ENABLED: 0
         run: |
           cd packages/mcp-server
-          go build -o ../../dist/second-brain-${{ matrix.target.os }}-${{ matrix.target.arch }}${{ matrix.target.ext }} ./cmd/second-brain
+          go build -trimpath -ldflags "-s -w -X main.version=${GITHUB_REF_NAME}" \
+            -o ../../dist/second-brain-${{ matrix.target.os }}-${{ matrix.target.arch }}${{ matrix.target.ext }} ./cmd/second-brain
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
@@ -52,6 +73,13 @@ jobs:
         with:
           path: dist
           merge-multiple: true
+
+      # The install scripts verify the downloaded binary against this file
+      - name: Checksums
+        run: |
+          cd dist
+          sha256sum second-brain-* > checksums.txt
+          cat checksums.txt
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
