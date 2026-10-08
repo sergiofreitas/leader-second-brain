@@ -36,6 +36,11 @@ func (s *Server) HandleIngest(ctx context.Context, args map[string]interface{}) 
 	aboutPersonHint, _ := args["about_person"].(string)
 	segments, _ := args["segments"].([]string)
 	hostExtraction, _ := args["extraction"].(*providers.EntityExtraction)
+	occurredArg, _ := args["occurred_at"].(string)
+	occurredAt, err := parseOccurredAt(occurredArg, time.Now())
+	if err != nil {
+		return nil, err
+	}
 
 	// Step 1: The text to store. Media is transcribed/described by the host.
 	if modality == "" {
@@ -55,7 +60,6 @@ func (s *Server) HandleIngest(ctx context.Context, args map[string]interface{}) 
 	// Step 2: Entities — from the host, or from the server's LLM provider
 	extraction := hostExtraction
 	if extraction == nil {
-		var err error
 		extraction, err = s.llm.ExtractEntities(content, providers.ExtractionConfig{
 			FeedbackCategories: s.cfg.FeedbackCategoryIDs(),
 			FeedbackEnabled:    s.cfg.Skills.Feedback,
@@ -82,7 +86,7 @@ func (s *Server) HandleIngest(ctx context.Context, args map[string]interface{}) 
 
 	// Steps 4-9 write the memory, its chunks and its graph in a single
 	// transaction: either everything is stored or nothing is.
-	err := s.store.InTx(func(tx *sql.Tx, st *sqlite.Store) error {
+	err = s.store.InTx(func(tx *sql.Tx, st *sqlite.Store) error {
 		g := s.graph.WithTx(tx)
 		var err error
 		person := func(name, role string) (string, error) {
@@ -121,6 +125,11 @@ func (s *Server) HandleIngest(ctx context.Context, args map[string]interface{}) 
 		if err := st.InsertMemory(memID, extraction.MemoryType, content, modality, "mcp", filePath, aboutName, 1.0); err != nil {
 			return fmt.Errorf("store memory: %w", err)
 		}
+		if occurredAt != "" {
+			if err := st.SetMemoryOccurredAt(memID, occurredAt); err != nil {
+				return fmt.Errorf("store memory date: %w", err)
+			}
+		}
 		if err := st.InsertChunks(memID, chunks); err != nil {
 			return fmt.Errorf("store chunks: %w", err)
 		}
@@ -133,6 +142,9 @@ func (s *Server) HandleIngest(ctx context.Context, args map[string]interface{}) 
 		}
 		if filePath != "" {
 			memProps["file_path"] = filePath
+		}
+		if occurredAt != "" {
+			memProps["occurred_at"] = occurredAt
 		}
 		if err := g.AddNode("Memory", memID, memProps); err != nil {
 			return fmt.Errorf("add memory node: %w", err)
@@ -245,6 +257,9 @@ func (s *Server) HandleIngest(ctx context.Context, args map[string]interface{}) 
 			if giverName != "" {
 				props["from"] = giverName
 			}
+			if occurredAt != "" {
+				props["occurred_at"] = occurredAt
+			}
 			if err := g.AddNode("Feedback", fbID, props); err != nil {
 				return fmt.Errorf("add feedback node: %w", err)
 			}
@@ -292,7 +307,7 @@ func (s *Server) HandleIngest(ctx context.Context, args map[string]interface{}) 
 		semanticIndex = "queued"
 	}
 
-	resultJSON, _ := json.MarshalIndent(map[string]interface{}{
+	result := map[string]interface{}{
 		"status":         "stored",
 		"memory_id":      memID,
 		"memory_type":    extraction.MemoryType,
@@ -305,7 +320,11 @@ func (s *Server) HandleIngest(ctx context.Context, args map[string]interface{}) 
 		"feedback_items": out.FeedbackItems,
 		"chunks":         len(chunks),
 		"semantic_index": semanticIndex,
-	}, "", "  ")
+	}
+	if occurredAt != "" {
+		result["occurred_at"] = occurredAt
+	}
+	resultJSON, _ := json.MarshalIndent(result, "", "  ")
 	return &ToolResult{
 		Content: []ContentBlock{{Type: "text", Text: string(resultJSON)}},
 	}, nil

@@ -83,7 +83,7 @@ func (s *Store) SearchFTS(query string, terms []string, limit int) ([]map[string
 		return nil, nil
 	}
 	rows, err := s.q.Query(
-		`SELECT m.id, m.type, COALESCE(m.about_person, ''), m.created_at,
+		`SELECT m.id, m.type, COALESCE(m.about_person, ''), m.created_at, COALESCE(m.occurred_at, ''),
 			snippet(memories_fts, 0, '<mark>', '</mark>', '...', 32) AS snippet,
 			bm25(memories_fts) AS rank
 		 FROM memories_fts
@@ -100,16 +100,20 @@ func (s *Store) SearchFTS(query string, terms []string, limit int) ([]map[string
 
 	var results []map[string]interface{}
 	for rows.Next() {
-		var id, memType, aboutPerson, createdAt, snippet string
+		var id, memType, aboutPerson, createdAt, occurredAt, snippet string
 		var rank float64
-		if err := rows.Scan(&id, &memType, &aboutPerson, &createdAt, &snippet, &rank); err != nil {
+		if err := rows.Scan(&id, &memType, &aboutPerson, &createdAt, &occurredAt, &snippet, &rank); err != nil {
 			return nil, err
 		}
-		results = append(results, map[string]interface{}{
+		result := map[string]interface{}{
 			"memory_id": id, "type": memType,
 			"about_person": aboutPerson, "created_at": createdAt,
 			"snippet": snippet, "rank": rank,
-		})
+		}
+		if occurredAt != "" {
+			result["occurred_at"] = occurredAt
+		}
+		results = append(results, result)
 	}
 	return results, rows.Err()
 }

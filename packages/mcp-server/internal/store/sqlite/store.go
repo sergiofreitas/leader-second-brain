@@ -201,12 +201,55 @@ func (s *Store) initSchema() error {
 		}
 	}
 
+	// Columns added after the first release: databases created before get
+	// them when they are opened
+	added := []struct{ table, column, typ string }{
+		{"memories", "occurred_at", "TEXT"}, // when it happened (YYYY-MM-DD), if not when stored
+		{"tasks", "completed_at", "TEXT"},
+	}
+	for _, c := range added {
+		if err := s.ensureColumn(c.table, c.column, c.typ); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// ensureColumn adds a column to a table unless it already exists
+func (s *Store) ensureColumn(table, column, typ string) error {
+	rows, err := s.q.Query(`SELECT name FROM pragma_table_info(?)`, table)
+	if err != nil {
+		return fmt.Errorf("columns of %s: %w", table, err)
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var name string
+		if err := rows.Scan(&name); err != nil {
+			return err
+		}
+		if name == column {
+			return nil
+		}
+	}
+	if err := rows.Err(); err != nil {
+		return err
+	}
+	if _, err := s.q.Exec(`ALTER TABLE ` + table + ` ADD COLUMN ` + column + ` ` + typ); err != nil {
+		return fmt.Errorf("add %s.%s: %w", table, column, err)
+	}
 	return nil
 }
 
 // ============================================================
 // Memory CRUD
 // ============================================================
+
+// SetMemoryOccurredAt records when what a memory is about happened
+// (YYYY-MM-DD), when that isn't the day it was stored
+func (s *Store) SetMemoryOccurredAt(memoryID, date string) error {
+	_, err := s.q.Exec(`UPDATE memories SET occurred_at = ? WHERE id = ?`, date, memoryID)
+	return err
+}
 
 func (s *Store) InsertMemory(id, memType, content, modality, source, rawFileRef, aboutPerson string, confidence float64) error {
 	_, err := s.q.Exec(

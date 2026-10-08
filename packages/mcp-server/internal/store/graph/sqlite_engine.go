@@ -298,7 +298,9 @@ func (g *SQLiteEngine) GetPersonContext(personID string) (*PersonContext, error)
 	}
 	ctx := &PersonContext{NodeProps: props}
 
-	newestFirst := "json_extract(n.props, '$.created_at') DESC"
+	// By when it happened: occurred_at (a date) when the memory was stored
+	// later, else when it was stored
+	newestFirst := "COALESCE(json_extract(n.props, '$.occurred_at'), json_extract(n.props, '$.created_at')) DESC"
 	lookups := []struct {
 		dest      *[]map[string]interface{}
 		edge      string

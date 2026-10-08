@@ -89,9 +89,7 @@ func (r *HybridRetriever) AssembleBriefing(
 					entry["content"] = c
 				}
 			}
-			if ca, ok := m["created_at"].(string); ok {
-				entry["created_at"] = ca
-			}
+			copyDates(entry, m)
 			memories = append(memories, entry)
 		}
 		briefing["memories"] = memories
@@ -135,9 +133,7 @@ func (r *HybridRetriever) AssembleBriefing(
 			if fmt_s, ok := f["format"].(string); ok {
 				entry["format"] = fmt_s
 			}
-			if ca, ok := f["created_at"].(string); ok {
-				entry["created_at"] = ca
-			}
+			copyDates(entry, f)
 			if from, ok := f["from"].(string); ok {
 				entry["from"] = from
 			}
@@ -181,9 +177,7 @@ func (r *HybridRetriever) AssembleBriefing(
 			if t, ok := r["type"].(string); ok {
 				hit["type"] = t
 			}
-			if ca, ok := r["created_at"].(string); ok {
-				hit["created_at"] = ca
-			}
+			copyDates(hit, r)
 			searchHits = append(searchHits, hit)
 		}
 		briefing["keyword_matches"] = searchHits
@@ -239,6 +233,16 @@ func (r *HybridRetriever) buildRecommendation(
 		return "Nenhuma recomendação específica para este contexto."
 	}
 	return strings.Join(parts, " ")
+}
+
+// copyDates copies when something happened (occurred_at, when it was stored
+// later) and when it was stored (created_at)
+func copyDates(dst, src map[string]interface{}) {
+	for _, key := range []string{"occurred_at", "created_at"} {
+		if v, ok := src[key].(string); ok && v != "" {
+			dst[key] = v
+		}
+	}
 }
 
 // feedbackItems returns the items (category and content) of a Feedback node

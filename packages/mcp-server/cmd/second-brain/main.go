@@ -104,6 +104,7 @@ func serve(args []string) {
 				"file_path":    in.FilePath,
 				"about_person": in.AboutPerson,
 				"segments":     in.Segments,
+				"occurred_at":  in.OccurredAt,
 				"extraction":   in.extraction(),
 			}
 			result, err := sb.HandleIngest(ctx, argsMap)
@@ -229,6 +230,7 @@ type ingestArgs struct {
 	MemoryType  string   `json:"memory_type,omitempty" jsonschema:"observation, feedback, one_on_one, assessment or voice_note (default: observation)"`
 	Summary     string   `json:"summary,omitempty" jsonschema:"one-sentence summary of the memory"`
 	Segments    []string `json:"segments,omitempty" jsonschema:"for long content (transcripts of meetings, long voice notes): the content split into consecutive passages by subject, a few paragraphs each, together covering all of it"`
+	OccurredAt  string   `json:"occurred_at,omitempty" jsonschema:"the day it happened, YYYY-MM-DD, when it isn't today (a 1:1, an assessment or a feedback recorded later); briefings order and filter by it"`
 
 	Persons       []personArg       `json:"persons,omitempty" jsonschema:"everyone mentioned, with their role when it is stated"`
 	Topics        []string          `json:"topics,omitempty" jsonschema:"short themes, reused across memories so patterns emerge (e.g. microgestão, delegação, autonomia)"`
@@ -313,6 +315,7 @@ func ingestDescription(cfg *config.Config) string {
 		"- tasks: follow-ups, with owner (who does it) and about_person (who it concerns).",
 		"- relationships: reporting lines (REPORTS_TO) and mentoring (MENTORS) stated in the content.",
 		"- memory_type feedback with feedback_items when someone's behavior is assessed, and feedback_from when the feedback was relayed by someone else.",
+		"- occurred_at: the day it happened (YYYY-MM-DD) when the user says it wasn't today, e.g. \"a avaliação foi em 02/09\". Don't put the date only in content.",
 		feedback,
 		"If the call is rejected, the error says which field to fix.",
 	}, "\n")
@@ -321,7 +324,7 @@ func ingestDescription(cfg *config.Config) string {
 type recallArgs struct {
 	PersonName string `json:"person_name" jsonschema:"name of the person to get context for"`
 	Context    string `json:"context,omitempty" jsonschema:"the situation: 1:1, pdi, feedback, team_review, progression, or general"`
-	TimeRange  string `json:"time_range,omitempty" jsonschema:"how far back to look: last_30d, last_90d, last_year, or all (default: last_90d)"`
+	TimeRange  string `json:"time_range,omitempty" jsonschema:"how far back to look, by when things happened: last_30d, last_90d, last_year, or all (default: last_90d); pending tasks are always listed"`
 }
 
 type teamArgs struct {

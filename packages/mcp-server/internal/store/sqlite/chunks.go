@@ -269,7 +269,7 @@ func (s *Store) SearchVector(queryVec []float32, limit int) ([]map[string]interf
 		args[i] = h.id
 	}
 	rows, err := s.q.Query(
-		`SELECT c.id, c.content, m.id, m.type, COALESCE(m.about_person, ''), m.created_at
+		`SELECT c.id, c.content, m.id, m.type, COALESCE(m.about_person, ''), m.created_at, COALESCE(m.occurred_at, '')
 		 FROM memory_chunks c JOIN memories m ON m.id = c.memory_id
 		 WHERE c.id IN (`+strings.Join(placeholders, ", ")+`)`,
 		args...,
@@ -282,14 +282,18 @@ func (s *Store) SearchVector(queryVec []float32, limit int) ([]map[string]interf
 	byChunk := make(map[string]map[string]interface{}, len(hits))
 	for rows.Next() {
 		var chunkID int64
-		var excerpt, memID, memType, aboutPerson, createdAt string
-		if err := rows.Scan(&chunkID, &excerpt, &memID, &memType, &aboutPerson, &createdAt); err != nil {
+		var excerpt, memID, memType, aboutPerson, createdAt, occurredAt string
+		if err := rows.Scan(&chunkID, &excerpt, &memID, &memType, &aboutPerson, &createdAt, &occurredAt); err != nil {
 			return nil, err
 		}
-		byChunk[chunkKey(chunkID)] = map[string]interface{}{
+		result := map[string]interface{}{
 			"memory_id": memID, "excerpt": excerpt, "type": memType,
 			"about_person": aboutPerson, "created_at": createdAt,
 		}
+		if occurredAt != "" {
+			result["occurred_at"] = occurredAt
+		}
+		byChunk[chunkKey(chunkID)] = result
 	}
 	if err := rows.Err(); err != nil {
 		return nil, err

@@ -146,6 +146,9 @@ func fuse(keyword, semantic []map[string]interface{}, limit int) []map[string]in
 					"about_person": r["about_person"],
 					"created_at":   r["created_at"],
 				}}
+				if occurredAt, ok := r["occurred_at"]; ok {
+					h.result["occurred_at"] = occurredAt
+				}
 				hits[id] = h
 				order = append(order, id)
 			}

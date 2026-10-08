@@ -162,6 +162,10 @@ func (s *Server) HandleRecall(ctx context.Context, args map[string]interface{}) 
 	if timeRange == "" {
 		timeRange = "last_90d"
 	}
+	start, err := rangeStart(timeRange, time.Now())
+	if err != nil {
+		return nil, err
+	}
 
 	// Find the person (ignoring case and accents) and use the stored name
 	personID, storedName, err := s.store.FindPerson(personName)
@@ -183,15 +187,20 @@ func (s *Server) HandleRecall(ctx context.Context, args map[string]interface{}) 
 		return nil, fmt.Errorf("get person context: %w", err)
 	}
 
-	// Pending tasks concerning this person (Task -[TARGETS]-> Person),
-	// whoever has to do them
+	// Memories and feedbacks of the time range, by when they happened.
+	// Pending tasks (Task -[TARGETS]-> Person, whoever has to do them) are
+	// listed whatever their age: they are still open.
+	personCtx.Memories = since(personCtx.Memories, start)
+	personCtx.Feedbacks = since(personCtx.Feedbacks, start)
 	tasks := personCtx.Tasks
 
 	// Search for related memories via FTS5
 	ftsResults, _ := s.store.SearchFTS(personName, nil, 10)
+	ftsResults = since(ftsResults, start)
 
 	// Assemble the briefing
 	briefing := s.retriever.AssembleBriefing(personName, contextType, personCtx, tasks, ftsResults)
+	briefing["time_range"] = timeRange
 
 	briefingJSON, _ := json.MarshalIndent(briefing, "", "  ")
 	return &ToolResult{
