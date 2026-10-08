@@ -2,8 +2,10 @@ package main
 
 import (
 	"context"
+	"errors"
 	"flag"
 	"fmt"
+	"io/fs"
 	"log"
 	"os"
 	"strings"
@@ -15,27 +17,58 @@ import (
 	"github.com/second-brain/second-brain/packages/mcp-server/internal/providers"
 )
 
-func main() {
-	configPath := flag.String("config", "", "Path to config.yaml (default: ~/.second-brain/config.yaml)")
-	flag.Parse()
+// version is set at build time: -ldflags "-X main.version=v0.2.0"
+var version = "dev"
 
-	// Resolve config path
+func main() {
+	if len(os.Args) > 1 {
+		switch os.Args[1] {
+		case "init":
+			os.Exit(runInit(os.Args[2:]))
+		case "version", "--version", "-version":
+			fmt.Println("second-brain", version)
+			return
+		case "help", "--help", "-help", "-h":
+			fmt.Print(usage)
+			return
+		}
+	}
+	serve(os.Args[1:])
+}
+
+const usage = `second-brain — memory for leadership (MCP server)
+
+Usage:
+  second-brain [--config PATH]   run the MCP server over stdio (what MCP hosts call)
+  second-brain init [options]    write a config file from a built-in profile
+  second-brain version           print the version
+
+Run "second-brain init --help" for the init options.
+`
+
+// serve runs the MCP server over stdio
+func serve(args []string) {
+	flags := flag.NewFlagSet("second-brain", flag.ExitOnError)
+	configPath := flags.String("config", "", "path to config.yaml (default: ~/.second-brain/config.yaml)")
+	flags.Parse(args)
+
+	// Without a config file the server runs with the defaults (local
+	// storage, keyword search), so it works right after install
 	path := *configPath
 	if path == "" {
 		path = config.DefaultConfigPath()
 	}
-
-	// Load config
 	cfg, err := config.Load(path)
-	if err != nil {
-		if os.IsNotExist(err) {
-			log.Fatalf("Config not found at %s. Copy a profile from configs/ to get started.", path)
-		}
+	switch {
+	case errors.Is(err, fs.ErrNotExist) && *configPath == "":
+		cfg = config.Default()
+		log.Printf("No config at %s: using the defaults (run `second-brain init` to create one)", path)
+	case err != nil:
 		log.Fatalf("load config: %v", err)
 	}
 
-	log.Printf("Second Brain — profile: %s, graph: %s, transport: %s",
-		cfg.Profile, cfg.Graph.Engine, cfg.Transport.Type)
+	log.Printf("Second Brain %s — profile: %s, graph: %s, transport: %s",
+		version, cfg.Profile, cfg.Graph.Engine, cfg.Transport.Type)
 	log.Printf("Storage: %s", cfg.Storage.SQLite.Path)
 
 	// Initialize the Second Brain server (graph + sqlite + providers)
@@ -49,7 +82,7 @@ func main() {
 	server := mcp.NewServer(
 		&mcp.Implementation{
 			Name:    "second-brain",
-			Version: "0.1.0",
+			Version: version,
 		},
 		nil,
 	)

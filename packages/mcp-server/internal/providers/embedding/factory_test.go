@@ -1,36 +1,49 @@
 package embedding
 
 import (
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 
+	"github.com/second-brain/second-brain/packages/mcp-server/configs"
 	"github.com/second-brain/second-brain/packages/mcp-server/internal/config"
 )
 
-// TestShippedConfigs loads every config in the repository and builds its
-// embedding provider, so the examples can't drift from what the code accepts
-func TestShippedConfigs(t *testing.T) {
+// TestShippedProfiles loads every profile embedded in the binary and builds
+// its embedding provider, so profiles can't drift from what the code accepts
+func TestShippedProfiles(t *testing.T) {
 	t.Setenv("OPENAI_API_KEY", "sk-test")
 	t.Setenv("SAIPOS_LITELLM_URL", "https://litellm.example.com/v1")
 	t.Setenv("SECOND_BRAIN_EMBEDDING_KEY", "sk-test")
 
 	want := map[string]string{
-		"examples/personal/config.yaml":                   "bge-m3",
-		"examples/startup/config.yaml":                    "text-embedding-3-small",
-		"examples/saipos/config.yaml":                     "text-embedding-3-small",
-		"packages/mcp-server/configs/default/config.yaml": "",
+		"default":  "",
+		"personal": "bge-m3",
+		"startup":  "text-embedding-3-small",
+		"saipos":   "text-embedding-3-small",
 	}
-	root := filepath.Join("..", "..", "..", "..", "..")
-	for path, model := range want {
-		cfg, err := config.Load(filepath.Join(root, path))
+	if got := configs.Profiles(); len(got) != len(want) {
+		t.Errorf("profiles = %v, want %d", got, len(want))
+	}
+	for name, model := range want {
+		data, err := configs.Profile(name)
 		if err != nil {
-			t.Errorf("%s: %v", path, err)
+			t.Errorf("%s: %v", name, err)
+			continue
+		}
+		path := filepath.Join(t.TempDir(), name+".yaml")
+		if err := os.WriteFile(path, data, 0o600); err != nil {
+			t.Fatal(err)
+		}
+		cfg, err := config.Load(path)
+		if err != nil {
+			t.Errorf("%s: %v", name, err)
 			continue
 		}
 		p, err := New(cfg.Providers.Embedding)
 		if err != nil {
-			t.Errorf("%s: %v", path, err)
+			t.Errorf("%s: %v", name, err)
 			continue
 		}
 		got := ""
@@ -38,7 +51,7 @@ func TestShippedConfigs(t *testing.T) {
 			got = p.Model()
 		}
 		if got != model {
-			t.Errorf("%s: embedding model = %q, want %q", path, got, model)
+			t.Errorf("%s: embedding model = %q, want %q", name, got, model)
 		}
 	}
 }

@@ -3,6 +3,8 @@ package sqlite
 import (
 	"database/sql"
 	"fmt"
+	"os"
+	"path/filepath"
 	"strings"
 
 	_ "modernc.org/sqlite"
@@ -34,6 +36,11 @@ type pendingVector struct {
 
 // New creates a new SQLite store at the given path
 func New(dbPath string) (*Store, error) {
+	// On a fresh install the data directory doesn't exist yet
+	if err := os.MkdirAll(filepath.Dir(dbPath), 0o700); err != nil {
+		return nil, fmt.Errorf("create data directory: %w", err)
+	}
+
 	// WAL for concurrent reads; busy_timeout so concurrent writers wait for
 	// the lock instead of failing with SQLITE_BUSY; _txlock=immediate takes
 	// the write lock at BEGIN, so a transaction that reads before writing

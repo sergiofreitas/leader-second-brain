@@ -13,8 +13,7 @@ storage:
     retention_days: 365
 
 providers:
-  # Saipos: the host transcribes, describes and extracts; no data leaves
-  # the machine through the server
+  # The MCP host transcribes, describes and extracts entities
   transcription: "host"
   ocr: "host"
   vlm: "host"

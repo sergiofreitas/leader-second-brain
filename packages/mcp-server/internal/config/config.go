@@ -137,6 +137,14 @@ func Load(path string) (*Config, error) {
 	return &cfg, nil
 }
 
+// Default returns the configuration used when there is no config file:
+// local storage under ~/.second-brain, keyword search only
+func Default() *Config {
+	cfg := &Config{Profile: "default"}
+	cfg.applyDefaults()
+	return cfg
+}
+
 func (c *Config) applyDefaults() {
 	if c.Storage.SQLite.Path == "" {
 		c.Storage.SQLite.Path = "~/.second-brain/memoria.db"
