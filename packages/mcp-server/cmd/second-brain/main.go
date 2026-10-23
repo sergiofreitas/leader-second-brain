@@ -12,6 +12,7 @@ import (
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
+	"github.com/second-brain/second-brain/packages/mcp-server/configs"
 	"github.com/second-brain/second-brain/packages/mcp-server/internal/config"
 	"github.com/second-brain/second-brain/packages/mcp-server/internal/mcpserver"
 	"github.com/second-brain/second-brain/packages/mcp-server/internal/providers"
@@ -39,32 +40,55 @@ func main() {
 const usage = `second-brain — memory for leadership (MCP server)
 
 Usage:
-  second-brain [--config PATH]   run the MCP server over stdio (what MCP hosts call)
+  second-brain [--config PATH] [--profile NAME]
+                                 run the MCP server over stdio (what MCP hosts call);
+                                 --profile is used when there is no config file
   second-brain init [options]    write a config file from a built-in profile
   second-brain version           print the version
 
 Run "second-brain init --help" for the init options.
 `
 
+// loadConfig picks the config: the file given with --config, else the one at
+// defaultPath, else the --profile, else the defaults (local storage, keyword
+// search), so the server works right after install. The Claude Desktop
+// extension passes --profile, and a config written by `second-brain init`
+// still wins, so every host on the computer shares it.
+func loadConfig(configPath, defaultPath, profile string) (*config.Config, error) {
+	path := configPath
+	if path == "" {
+		path = defaultPath
+	}
+	cfg, err := config.Load(path)
+	switch {
+	case errors.Is(err, fs.ErrNotExist) && configPath == "" && profile != "":
+		data, err := configs.Profile(profile)
+		if err != nil {
+			return nil, fmt.Errorf("load profile: %w", err)
+		}
+		if cfg, err = config.Parse(data); err != nil {
+			return nil, fmt.Errorf("load profile %s: %w", profile, err)
+		}
+		log.Printf("No config at %s: using the %s profile", path, profile)
+	case errors.Is(err, fs.ErrNotExist) && configPath == "":
+		cfg = config.Default()
+		log.Printf("No config at %s: using the defaults (run `second-brain init` to create one)", path)
+	case err != nil:
+		return nil, fmt.Errorf("load config: %w", err)
+	}
+	return cfg, nil
+}
+
 // serve runs the MCP server over stdio
 func serve(args []string) {
 	flags := flag.NewFlagSet("second-brain", flag.ExitOnError)
 	configPath := flags.String("config", "", "path to config.yaml (default: ~/.second-brain/config.yaml)")
+	profile := flags.String("profile", "", "built-in profile to use when there is no config file: "+strings.Join(configs.Profiles(), ", "))
 	flags.Parse(args)
 
-	// Without a config file the server runs with the defaults (local
-	// storage, keyword search), so it works right after install
-	path := *configPath
-	if path == "" {
-		path = config.DefaultConfigPath()
-	}
-	cfg, err := config.Load(path)
-	switch {
-	case errors.Is(err, fs.ErrNotExist) && *configPath == "":
-		cfg = config.Default()
-		log.Printf("No config at %s: using the defaults (run `second-brain init` to create one)", path)
-	case err != nil:
-		log.Fatalf("load config: %v", err)
+	cfg, err := loadConfig(*configPath, config.DefaultConfigPath(), *profile)
+	if err != nil {
+		log.Fatal(err)
 	}
 
 	log.Printf("Second Brain %s — profile: %s, graph: %s, transport: %s",

@@ -120,7 +120,12 @@ func Load(path string) (*Config, error) {
 	if err != nil {
 		return nil, fmt.Errorf("read config %s: %w", path, err)
 	}
+	return Parse(data)
+}
 
+// Parse reads a config from YAML (a file or an embedded profile), expanding
+// env vars and applying the defaults
+func Parse(data []byte) (*Config, error) {
 	// Expand environment variables in the YAML
 	expanded := os.Expand(string(data), func(key string) string {
 		return os.Getenv(key)

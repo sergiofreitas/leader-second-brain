@@ -1,6 +1,7 @@
 # Binary (root level only)
 /second-brain
 /dist/
+/build/
 
 # SQLite databases
 *.db

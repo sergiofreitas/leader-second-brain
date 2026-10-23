@@ -1,0 +1,74 @@
+{
+  "manifest_version": "0.2",
+  "name": "second-brain",
+  "display_name": "Second Brain",
+  "version": "0.3.0",
+  "description": "Memory for leadership: capture what you observe about your team and recall it before 1:1s, PDIs and feedback sessions",
+  "long_description": "A local-first memory for leaders. Claude reads your notes, 1:1 transcripts, feedback and screenshots, extracts who and what they are about, and stores them in a knowledge graph on your computer (~/.second-brain). Before a 1:1, a PDI or a feedback session, it brings back the history, pending tasks, feedbacks and recurring topics of that person. Nothing leaves your computer unless you turn on semantic search with an embedding gateway.",
+  "author": {
+    "name": "Sérgio Freitas",
+    "url": "https://github.com/sergiofreitas/leader-second-brain"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/sergiofreitas/leader-second-brain"
+  },
+  "homepage": "https://github.com/sergiofreitas/leader-second-brain",
+  "license": "MIT",
+  "keywords": ["leadership", "1:1", "feedback", "pdi", "memory", "people management"],
+  "server": {
+    "type": "binary",
+    "entry_point": "server/second-brain-windows-amd64.exe",
+    "mcp_config": {
+      "command": "${__dirname}/server/second-brain-windows-amd64.exe",
+      "args": ["--profile", "${user_config.profile}"],
+      "env": {
+        "SAIPOS_LITELLM_URL": "${user_config.embedding_url}",
+        "SECOND_BRAIN_EMBEDDING_KEY": "${user_config.embedding_key}"
+      },
+      "platform_overrides": {
+        "darwin": {
+          "command": "/bin/sh",
+          "args": ["${__dirname}/server/second-brain-darwin.sh", "--profile", "${user_config.profile}"]
+        }
+      }
+    }
+  },
+  "tools": [
+    { "name": "ingest", "description": "Store a memory about a person, with the people, topics, tasks and feedback extracted from it" },
+    { "name": "list_people", "description": "List everyone already known, to reuse their exact names" },
+    { "name": "rename_person", "description": "Rename a person everywhere they are referenced" },
+    { "name": "complete_task", "description": "Mark a follow-up task as done" },
+    { "name": "delete_memory", "description": "Delete a memory and what was derived from it, previewed before it deletes" },
+    { "name": "recall", "description": "Get the context about a person for a 1:1, PDI, feedback or team review" },
+    { "name": "get_team_context", "description": "Review a leader's team: pending tasks, last feedbacks, assessments and risk signals" },
+    { "name": "search_memories", "description": "Search memories by subject, word or meaning" }
+  ],
+  "user_config": {
+    "profile": {
+      "type": "string",
+      "title": "Profile",
+      "description": "Built-in profile: saipos, default, startup or personal. A config file at ~/.second-brain/config.yaml (from `second-brain init`) takes precedence.",
+      "default": "saipos",
+      "required": false
+    },
+    "embedding_url": {
+      "type": "string",
+      "title": "Embedding gateway URL (optional)",
+      "description": "LiteLLM gateway for semantic search, e.g. https://<gateway>/v1. Leave empty to search by keyword only, with nothing sent anywhere.",
+      "default": "",
+      "required": false
+    },
+    "embedding_key": {
+      "type": "string",
+      "title": "Embedding gateway key (optional)",
+      "description": "API key for the embedding gateway",
+      "sensitive": true,
+      "default": "",
+      "required": false
+    }
+  },
+  "compatibility": {
+    "platforms": ["win32", "darwin"]
+  }
+}

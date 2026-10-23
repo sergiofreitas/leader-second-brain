@@ -1,4 +1,4 @@
-.PHONY: build test clean install-skills install-plugins sync-skills check-skills
+.PHONY: build test clean install-skills install-plugins sync-skills check-skills mcpb skills-zip
 
 BINARY_NAME=second-brain
 MCP_DIR=packages/mcp-server
@@ -44,7 +44,32 @@ install-skills:
 	cp -r $(SKILLS_DIR)/* $(TARGET)/
 	@echo "Skills installed to $(TARGET)"
 
+# Claude Desktop extension (.mcpb): the binaries for Windows and macOS (both
+# architectures) with the manifest, in one file installed with a double click
+MCPB_SRC=$(PLUGIN_DIR)/claude-desktop
+MCPB_BUILD=build/mcpb
+MCPB=npx -y @anthropic-ai/mcpb
+VERSION ?= $(shell git describe --tags --always 2>/dev/null || echo dev)
+GO_BUILD=CGO_ENABLED=0 go build -trimpath -ldflags "-s -w -X main.version=$(VERSION)"
+
+mcpb:
+	rm -rf $(MCPB_BUILD) && mkdir -p $(MCPB_BUILD)/server dist
+	cp $(MCPB_SRC)/manifest.json $(MCPB_BUILD)/
+	cp $(MCPB_SRC)/second-brain-darwin.sh $(MCPB_BUILD)/server/
+	cd $(MCP_DIR) && GOOS=windows GOARCH=amd64 $(GO_BUILD) -o ../../$(MCPB_BUILD)/server/second-brain-windows-amd64.exe ./cmd/second-brain
+	cd $(MCP_DIR) && GOOS=darwin GOARCH=arm64 $(GO_BUILD) -o ../../$(MCPB_BUILD)/server/second-brain-darwin-arm64 ./cmd/second-brain
+	cd $(MCP_DIR) && GOOS=darwin GOARCH=amd64 $(GO_BUILD) -o ../../$(MCPB_BUILD)/server/second-brain-darwin-amd64 ./cmd/second-brain
+	chmod +x $(MCPB_BUILD)/server/*
+	$(MCPB) validate $(MCPB_BUILD)/manifest.json
+	$(MCPB) pack $(MCPB_BUILD) dist/second-brain.mcpb
+
+# Skills as zip files, to upload in Claude Desktop or claude.ai
+# (Settings > Capabilities > Skills), where plugins don't reach
+skills-zip:
+	rm -rf dist/skills && mkdir -p dist/skills
+	@for d in $(SKILLS_DIR)/*/; do n=$$(basename $$d); (cd $(SKILLS_DIR) && zip -qr ../../dist/skills/$$n.zip $$n) && echo "dist/skills/$$n.zip"; done
+
 clean:
 	rm -f $(BINARY_NAME)
-	rm -rf dist/
+	rm -rf dist/ build/
 	cd $(MCP_DIR) && go clean
