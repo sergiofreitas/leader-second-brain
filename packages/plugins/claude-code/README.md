@@ -43,6 +43,7 @@ team and recall it before 1:1s, PDIs and feedback sessions.
 | Tool | Purpose |
 |------|---------|
 | `ingest` | Store a memory with the entities Claude extracted from it |
+| `get_playbook` | The organization's method: rites, feedback format, assessment rubric |
 | `list_people` | Known people, to reuse their stored names |
 | `rename_person` | Rename a known person (full name, typo fix) |
 | `complete_task` | Mark a follow-up as done |

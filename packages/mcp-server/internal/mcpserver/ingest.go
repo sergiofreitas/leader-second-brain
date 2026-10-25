@@ -33,6 +33,8 @@ func (s *Server) HandleIngest(ctx context.Context, args map[string]interface{}) 
 	modality, _ := args["modality"].(string)
 	content, _ := args["content"].(string)
 	filePath, _ := args["file_path"].(string)
+	sourceURL, _ := args["source_url"].(string)
+	sourceURL = strings.TrimSpace(sourceURL)
 	aboutPersonHint, _ := args["about_person"].(string)
 	segments, _ := args["segments"].([]string)
 	hostExtraction, _ := args["extraction"].(*providers.EntityExtraction)
@@ -148,6 +150,9 @@ func (s *Server) HandleIngest(ctx context.Context, args map[string]interface{}) 
 		if filePath != "" {
 			memProps["file_path"] = filePath
 		}
+		if sourceURL != "" {
+			memProps["source_url"] = sourceURL
+		}
 		if occurredAt != "" {
 			memProps["occurred_at"] = occurredAt
 		}
@@ -197,6 +202,9 @@ func (s *Server) HandleIngest(ctx context.Context, args map[string]interface{}) 
 			props := map[string]interface{}{
 				"description": t.Description, "status": "pending", "created_at": now,
 			}
+			if t.DueDate != "" {
+				props["due_date"] = t.DueDate
+			}
 			ownerID := ""
 			if t.Owner != "" {
 				if ownerID, err = person(t.Owner, roles[t.Owner]); err != nil {
@@ -210,7 +218,7 @@ func (s *Server) HandleIngest(ctx context.Context, args map[string]interface{}) 
 					return err
 				}
 			}
-			if err := st.InsertTask(taskID, t.Description, ownerID, "pending"); err != nil {
+			if err := st.InsertTask(taskID, t.Description, ownerID, "pending", t.DueDate); err != nil {
 				return fmt.Errorf("store task: %w", err)
 			}
 			if err := g.AddNode("Task", taskID, props); err != nil {
@@ -287,15 +295,48 @@ func (s *Server) HandleIngest(ctx context.Context, args map[string]interface{}) 
 			}
 			for _, item := range groups[about] {
 				itemID := generateID("fi")
-				if err := g.AddNode("FeedbackItem", itemID, map[string]interface{}{
-					"category": item.Category, "content": item.Content,
-				}); err != nil {
+				itemProps := map[string]interface{}{"category": item.Category, "content": item.Content}
+				for key, v := range map[string]string{
+					"situation": item.Situation, "behavior": item.Behavior,
+					"impact": item.Impact, "change_signal": item.ChangeSignal,
+				} {
+					if v != "" {
+						itemProps[key] = v
+					}
+				}
+				if err := g.AddNode("FeedbackItem", itemID, itemProps); err != nil {
 					return fmt.Errorf("add feedback item node: %w", err)
 				}
 				if err := g.AddEdge(fbID, itemID, "CONTAINS", nil); err != nil {
 					return err
 				}
 				out.FeedbackItems++
+			}
+		}
+
+		// Step 10: Assessment — the scores by criterion, about the memory's
+		// person, with the divergences between the leader and the person
+		if extraction.Assessment != nil {
+			date := occurredAt
+			if date == "" {
+				date = time.Now().Format(dateLayout)
+			}
+			assessID := generateID("assess")
+			props := s.assessmentProps(extraction.Assessment)
+			props["date"], props["created_at"], props["source_memory"] = date, now, memID
+			if err := g.AddNode("Assessment", assessID, props); err != nil {
+				return fmt.Errorf("add assessment node: %w", err)
+			}
+			if err := g.AddEdge(memID, assessID, "FORMALIZED_IN", nil); err != nil {
+				return err
+			}
+			if err := g.AddEdge(assessID, aboutID, "ASSESSED", nil); err != nil {
+				return err
+			}
+			out.Assessment = map[string]interface{}{
+				"criteria":    len(extraction.Assessment.Scores),
+				"divergences": props["divergences"],
+				"visibility":  props["visibility"],
 			}
 		}
 		out.AboutPerson = aboutName
@@ -331,6 +372,12 @@ func (s *Server) HandleIngest(ctx context.Context, args map[string]interface{}) 
 	}
 	if occurredAt != "" {
 		result["occurred_at"] = occurredAt
+	}
+	if sourceURL != "" {
+		result["source_url"] = sourceURL
+	}
+	if out.Assessment != nil {
+		result["assessment"] = out.Assessment
 	}
 	resultJSON, _ := json.MarshalIndent(result, "", "  ")
 	return &ToolResult{
@@ -388,6 +435,13 @@ func (s *Server) normalizeExtraction(ex *providers.EntityExtraction) error {
 		if t.Description == "" {
 			return fmt.Errorf("task %d: description is required", i+1)
 		}
+		if t.DueDate = strings.TrimSpace(t.DueDate); t.DueDate != "" {
+			due, err := parseDate(t.DueDate)
+			if err != nil {
+				return fmt.Errorf("task %d: invalid due_date %q: use YYYY-MM-DD (e.g. 2026-11-15)", i+1, t.DueDate)
+			}
+			t.DueDate = due
+		}
 	}
 
 	categories := s.cfg.FeedbackCategoryIDs()
@@ -396,6 +450,8 @@ func (s *Server) normalizeExtraction(ex *providers.EntityExtraction) error {
 		item.Category = strings.ToLower(strings.TrimSpace(item.Category))
 		item.Content = strings.TrimSpace(item.Content)
 		item.AboutPerson = strings.TrimSpace(item.AboutPerson)
+		item.Situation, item.Behavior = strings.TrimSpace(item.Situation), strings.TrimSpace(item.Behavior)
+		item.Impact, item.ChangeSignal = strings.TrimSpace(item.Impact), strings.TrimSpace(item.ChangeSignal)
 		if item.Content == "" {
 			return fmt.Errorf("feedback item %d: content is required", i+1)
 		}
@@ -406,7 +462,7 @@ func (s *Server) normalizeExtraction(ex *providers.EntityExtraction) error {
 			return fmt.Errorf("feedback item %d: about_person is required (on the item or the memory)", i+1)
 		}
 	}
-	return nil
+	return s.normalizeAssessment(ex)
 }
 
 // ensurePerson returns the ID and stored name of the person with the given
@@ -460,6 +516,7 @@ type ingestOutcome struct {
 	Persons       []personOutcome
 	Tasks         int
 	FeedbackItems int
+	Assessment    map[string]interface{}
 	lastPerson    string // stored name of the last person resolved
 	seen          map[string]int
 }

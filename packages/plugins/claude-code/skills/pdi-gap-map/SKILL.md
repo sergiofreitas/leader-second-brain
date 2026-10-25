@@ -39,7 +39,17 @@ like `comunic*`) finds older observations.
 When the leader approves the assessment, call `ingest` with
 `memory_type: "assessment"`, `about_person`, the report as `content`, the
 valences with gaps as `topics`, the agreed development actions as
-`tasks` (`owner` and `about_person`), and `occurred_at` (`YYYY-MM-DD`) when
-the assessment happened on another day.
+`tasks` (`owner`, `about_person` and `due_date`), and `occurred_at`
+(`YYYY-MM-DD`) when the assessment happened on another day.
+
+## Scores by criterion
+
+When the organization scores people against criteria (a culture score, its
+behaviors), `get_playbook(section: "assessment")` returns the scale, the
+criteria with their reflection questions, the divergence threshold and who
+may see the scores. Use those criteria — not your own — and record the
+scores in `ingest`'s `assessment` (`scores` with `criterion`, `leader`,
+`self` and `evidence`). `recall` then returns each assessment with its
+averages and divergences, so the next PDI compares like with like.
 
 Answer in the user's language (default: Portuguese).

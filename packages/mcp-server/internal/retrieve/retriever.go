@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/second-brain/second-brain/packages/mcp-server/internal/providers"
 	"github.com/second-brain/second-brain/packages/mcp-server/internal/store/graph"
@@ -16,6 +17,9 @@ type HybridRetriever struct {
 	store     *sqlite.Store
 	graph     graph.GraphEngine
 	embedding providers.EmbeddingProvider
+
+	// Alerts are the thresholds of the team view's signals
+	Alerts Alerts
 }
 
 // NewHybridRetriever creates a new hybrid retriever
@@ -92,6 +96,9 @@ func (r *HybridRetriever) AssembleBriefing(
 					entry["content"] = c
 				}
 			}
+			if u, ok := m["source_url"].(string); ok {
+				entry["source_url"] = u
+			}
 			copyDates(entry, m)
 			memories = append(memories, entry)
 		}
@@ -105,11 +112,12 @@ func (r *HybridRetriever) AssembleBriefing(
 
 	// Pending tasks, with their id (for complete_task), and the ones
 	// completed in the time range
+	now := time.Now()
 	if len(pendingTasks) > 0 {
-		briefing["pending_tasks"] = TaskEntries(pendingTasks)
+		briefing["pending_tasks"] = TaskEntries(pendingTasks, now)
 	}
 	if personCtx != nil && len(personCtx.DoneTasks) > 0 {
-		briefing["completed_tasks"] = TaskEntries(personCtx.DoneTasks)
+		briefing["completed_tasks"] = TaskEntries(personCtx.DoneTasks, now)
 	}
 
 	// Feedbacks from graph
@@ -135,6 +143,12 @@ func (r *HybridRetriever) AssembleBriefing(
 	}
 	if len(assessments) > 0 {
 		briefing["assessments"] = assessments
+		for _, a := range assessments {
+			if a["visibility"] == "leader_only" {
+				briefing["assessments_note"] = "Scores with visibility leader_only are the leader's private notes: never put them in anything shared with the person (a 1:1 record, a feedback, a message)."
+				break
+			}
+		}
 	}
 
 	// FTS search results (keyword-matched memories)
@@ -211,19 +225,28 @@ func (r *HybridRetriever) buildRecommendation(
 }
 
 // TaskEntries returns tasks as listed to the host: id (for complete_task),
-// description, status, owner and dates
-func TaskEntries(tasks []map[string]interface{}) []map[string]interface{} {
+// description, status, owner, dates, and whether it is overdue
+func TaskEntries(tasks []map[string]interface{}, now time.Time) []map[string]interface{} {
 	entries := make([]map[string]interface{}, 0, len(tasks))
 	for _, t := range tasks {
 		entry := map[string]interface{}{}
-		for _, key := range []string{"id", "description", "status", "owner", "created_at", "completed_at"} {
+		for _, key := range []string{"id", "description", "status", "owner", "due_date", "created_at", "completed_at"} {
 			if v, ok := t[key].(string); ok && v != "" {
 				entry[key] = v
 			}
 		}
+		if overdue(t, now) {
+			entry["overdue"] = true
+		}
 		entries = append(entries, entry)
 	}
 	return entries
+}
+
+// overdue says whether a pending task is past its due date
+func overdue(t map[string]interface{}, now time.Time) bool {
+	due, _ := t["due_date"].(string)
+	return due != "" && t["status"] == "pending" && due < now.Format("2006-01-02")
 }
 
 // copyDates copies when something happened (occurred_at, when it was stored
@@ -248,10 +271,16 @@ func (r *HybridRetriever) feedbackItems(feedbackID string) []map[string]interfac
 		if err != nil {
 			continue
 		}
-		items = append(items, map[string]interface{}{
+		entry := map[string]interface{}{
 			"category": item["category"],
 			"content":  item["content"],
-		})
+		}
+		for _, key := range []string{"situation", "behavior", "impact", "change_signal"} {
+			if v, ok := item[key].(string); ok && v != "" {
+				entry[key] = v
+			}
+		}
+		items = append(items, entry)
 	}
 	return items
 }

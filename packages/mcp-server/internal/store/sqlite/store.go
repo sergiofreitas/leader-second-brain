@@ -454,10 +454,11 @@ func FoldName(name string) string {
 // Task CRUD
 // ============================================================
 
-func (s *Store) InsertTask(id, description, owner, status string) error {
+// InsertTask stores a task; deadline is a date (YYYY-MM-DD) or "" for none
+func (s *Store) InsertTask(id, description, owner, status, deadline string) error {
 	_, err := s.q.Exec(
-		`INSERT INTO tasks (id, description, owner, status) VALUES (?, ?, ?, ?)`,
-		id, description, owner, status,
+		`INSERT INTO tasks (id, description, owner, status, deadline) VALUES (?, ?, ?, ?, NULLIF(?, ''))`,
+		id, description, owner, status, deadline,
 	)
 	return err
 }

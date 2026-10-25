@@ -138,13 +138,14 @@ the server sends nothing anywhere.
 
 | Tool | Purpose |
 |------|---------|
-| `ingest` | Store a memory (text, or audio/image/video transcribed or described by the host) with the entities the host extracted — persons, topics, tasks, relationships, feedback items — and the day it happened (`occurred_at`); refuses a new name that looks like a stored one until the user confirms |
+| `ingest` | Store a memory (text, or audio/image/video transcribed or described by the host) with the entities the host extracted — persons, topics, tasks with due dates, relationships, feedback items, scores by criterion — the day it happened (`occurred_at`) and a link to its source; refuses a new name that looks like a stored one until the user confirms |
+| `get_playbook` | The organization's method: how each rite (1:1, weekly, skip-level, feedback) is prepared, run and recorded, the feedback format, the assessment rubric and the alert thresholds — from the profile and an optional private playbook file |
 | `list_people` | List known people, so the host reuses their stored names |
 | `rename_person` | Rename a known person everywhere their name is stored (memories, tasks, feedbacks); refuses another person's name |
 | `complete_task` | Mark a follow-up as done |
-| `delete_memory` | Delete a memory stored by mistake, with its feedback items and tasks; a first call without `confirm` only previews what would be deleted |
+| `delete_memory` | Delete a memory stored by mistake, with its feedback items, assessment and tasks; a first call without `confirm` only previews what would be deleted |
 | `recall` | Retrieve context about a person (by full or partial name) for 1:1, PDI, feedback, or team review, over a time range by when things happened |
-| `get_team_context` | Review a leader's team (recursive hierarchy): each person's pending tasks, last feedback and assessment, topics and signals; the topics people share; the leader's pending tasks |
+| `get_team_context` | Review a leader's team (recursive hierarchy): each person's pending tasks (overdue ones flagged), last feedback and assessment, topics and signals; the topics people share; the leader's pending tasks |
 | `search_memories` | Search by keyword (FTS5, with synonyms and inflections added by the host) and, with an embedding provider configured, by meaning — fused into one ranking, with the best matching passage of each memory |
 
 ## Architecture

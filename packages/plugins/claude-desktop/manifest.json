@@ -36,6 +36,7 @@
   },
   "tools": [
     { "name": "ingest", "description": "Store a memory about a person, with the people, topics, tasks and feedback extracted from it" },
+    { "name": "get_playbook", "description": "Get the organization's method for 1:1s, weeklies, skip-levels, feedbacks and assessments" },
     { "name": "list_people", "description": "List everyone already known, to reuse their exact names" },
     { "name": "rename_person", "description": "Rename a person everywhere they are referenced" },
     { "name": "complete_task", "description": "Mark a follow-up task as done" },

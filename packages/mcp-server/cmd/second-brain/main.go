@@ -90,6 +90,15 @@ func serve(args []string) {
 	if err != nil {
 		log.Fatal(err)
 	}
+	// A broken playbook mustn't stop the server (the host would only see
+	// "connection closed"): it runs with the profile's method, and
+	// get_playbook says why
+	if err := cfg.LoadPlaybook(); err != nil {
+		cfg.PlaybookProblem = err.Error()
+		log.Printf("Playbook: not loaded — %v", err)
+	} else if cfg.PlaybookSource != "" {
+		log.Printf("Playbook: %s", cfg.PlaybookSource)
+	}
 
 	log.Printf("Second Brain %s — profile: %s, graph: %s, transport: %s",
 		version, cfg.Profile, cfg.Graph.Engine, cfg.Transport.Type)
@@ -126,6 +135,7 @@ func serve(args []string) {
 				"modality":     in.Modality,
 				"content":      in.Content,
 				"file_path":    in.FilePath,
+				"source_url":   in.SourceURL,
 				"about_person": in.AboutPerson,
 				"segments":     in.Segments,
 				"occurred_at":  in.OccurredAt,
@@ -133,6 +143,21 @@ func serve(args []string) {
 				"extraction":   in.extraction(),
 			}
 			result, err := sb.HandleIngest(ctx, argsMap)
+			if err != nil {
+				return nil, nil, err
+			}
+			return toCallToolResult(result), nil, nil
+		},
+	)
+
+	// --- get_playbook ---
+	mcp.AddTool(server,
+		&mcp.Tool{
+			Name:        "get_playbook",
+			Description: "Get the organization's method for leading people: each rite (one_on_one, weekly, skip_level, feedback) with its purpose, cadence, preparation, agenda, limit of agreements and how it is recorded; the feedback format (categories in order, items per category, how to phrase an item, checks before giving one); the assessment rubric (scale, criteria with their questions, divergence threshold, who may see the scores); and the alert thresholds. Call it before preparing or recording a rite, a feedback or an assessment, and follow it: it is the organization's, not a suggestion. Pass rite to get only what that rite needs.",
+		},
+		func(ctx context.Context, req *mcp.CallToolRequest, in playbookArgs) (*mcp.CallToolResult, any, error) {
+			result, err := sb.HandleGetPlaybook(ctx, map[string]interface{}{"rite": in.Rite, "section": in.Section})
 			if err != nil {
 				return nil, nil, err
 			}
@@ -207,7 +232,7 @@ func serve(args []string) {
 	mcp.AddTool(server,
 		&mcp.Tool{
 			Name:        "recall",
-			Description: "Retrieve context about a person for a specific situation (1:1, PDI, feedback, team review). Returns memories, tasks, feedbacks, assessments, patterns, and signals from the knowledge graph.",
+			Description: "Retrieve context about a person for a specific situation (1:1, PDI, feedback, team review). Returns memories (with their type and source_url), pending tasks (with ids, due_date and overdue) and the ones completed, feedbacks with their items, assessments (scores by criterion, averages and divergences between the leader's and the person's own) and recurring topics. Assessments with visibility leader_only are the leader's private notes: never put them in anything shared with the person.",
 		},
 		func(ctx context.Context, req *mcp.CallToolRequest, in recallArgs) (*mcp.CallToolResult, any, error) {
 			argsMap := map[string]interface{}{
@@ -227,7 +252,7 @@ func serve(args []string) {
 	mcp.AddTool(server,
 		&mcp.Tool{
 			Name:        "get_team_context",
-			Description: "Review a leader's team (direct and indirect reports). For each person: pending tasks (with ids), last feedback with its items, last assessment, last memory, recurring topics and signals (no_feedback, no_recent_memory, stale_task). For the team: shared_topics — topics several people share, with who, which point to collective actions — and leader_pending_tasks, what the leader has to do. The leader can be named by part of the name.",
+			Description: "Review a leader's team (direct and indirect reports). For each person: pending tasks (with ids, due_date and overdue), last feedback with its items, last assessment, last memory, recurring topics and signals (no_feedback, no_recent_memory, stale_task, overdue_task; the thresholds are the playbook's alerts). For the team: shared_topics — topics several people share, with who, which point to collective actions — and leader_pending_tasks, what the leader has to do. The leader can be named by part of the name.",
 		},
 		func(ctx context.Context, req *mcp.CallToolRequest, in teamArgs) (*mcp.CallToolResult, any, error) {
 			argsMap := map[string]interface{}{
@@ -281,8 +306,9 @@ type ingestArgs struct {
 	Modality    string   `json:"modality" jsonschema:"where the content came from: text, audio, image or video"`
 	Content     string   `json:"content" jsonschema:"the text to remember, in the user's own language: the note itself, or your transcription/description of the audio, image or video"`
 	FilePath    string   `json:"file_path,omitempty" jsonschema:"path of the original media file, kept as a reference"`
+	SourceURL   string   `json:"source_url,omitempty" jsonschema:"link to where the content came from (a meeting's notes or transcript, a document), kept as a reference"`
 	AboutPerson string   `json:"about_person,omitempty" jsonschema:"the person this memory is mainly about"`
-	MemoryType  string   `json:"memory_type,omitempty" jsonschema:"observation, feedback, one_on_one, assessment or voice_note (default: observation)"`
+	MemoryType  string   `json:"memory_type,omitempty" jsonschema:"observation, feedback, one_on_one, weekly, skip_level, assessment or voice_note (default: observation; assessment when an assessment is passed)"`
 	Summary     string   `json:"summary,omitempty" jsonschema:"one-sentence summary of the memory"`
 	Segments    []string `json:"segments,omitempty" jsonschema:"for long content (transcripts of meetings, long voice notes): the content split into consecutive passages by subject, a few paragraphs each, together covering all of it"`
 	OccurredAt  string   `json:"occurred_at,omitempty" jsonschema:"the day it happened, YYYY-MM-DD, when it isn't today (a 1:1, an assessment or a feedback recorded later); briefings order and filter by it"`
@@ -293,7 +319,26 @@ type ingestArgs struct {
 	Relationships []relationshipArg `json:"relationships,omitempty" jsonschema:"reporting lines and other person-to-person relationships stated in the content"`
 	FeedbackItems []feedbackItemArg `json:"feedback_items,omitempty" jsonschema:"feedback about someone, split into the configured categories"`
 	FeedbackFrom  string            `json:"feedback_from,omitempty" jsonschema:"who gave the feedback, when it was relayed by someone else"`
+	Assessment    *assessmentArg    `json:"assessment,omitempty" jsonschema:"scores of the about_person by criterion (e.g. a culture score), the leader's and the person's own"`
 	NewPersons    []string          `json:"new_persons,omitempty" jsonschema:"names that are new people although ingest said they may be someone already stored, after the user confirmed they are someone else"`
+}
+
+type assessmentArg struct {
+	Name   string     `json:"name,omitempty" jsonschema:"what was assessed (default: the assessment of get_playbook)"`
+	Cycle  string     `json:"cycle,omitempty" jsonschema:"the period it refers to, e.g. 2026-10"`
+	Scores []scoreArg `json:"scores" jsonschema:"one per criterion scored"`
+}
+
+type scoreArg struct {
+	Criterion string `json:"criterion" jsonschema:"the criterion's id or name, from get_playbook"`
+	Leader    *int   `json:"leader,omitempty" jsonschema:"the leader's score"`
+	Self      *int   `json:"self,omitempty" jsonschema:"the person's own score (self-assessment)"`
+	Evidence  string `json:"evidence,omitempty" jsonschema:"the facts behind the score; needed where leader and self diverge"`
+}
+
+type playbookArgs struct {
+	Rite    string `json:"rite,omitempty" jsonschema:"only this rite and what it needs: one_on_one, weekly, skip_level or feedback (the keys of rites)"`
+	Section string `json:"section,omitempty" jsonschema:"only this section: rites, feedback, assessment or alerts"`
 }
 
 type personArg struct {
@@ -305,6 +350,7 @@ type taskArg struct {
 	Description string `json:"description" jsonschema:"what has to be done"`
 	Owner       string `json:"owner,omitempty" jsonschema:"who has to do it"`
 	AboutPerson string `json:"about_person,omitempty" jsonschema:"who it concerns (default: the memory's about_person)"`
+	DueDate     string `json:"due_date,omitempty" jsonschema:"when it is due, YYYY-MM-DD, if a date was agreed"`
 }
 
 type relationshipArg struct {
@@ -317,12 +363,17 @@ type feedbackItemArg struct {
 	Category    string `json:"category" jsonschema:"one of the configured feedback categories"`
 	Content     string `json:"content" jsonschema:"the feedback point, written so it can be shared with the person"`
 	AboutPerson string `json:"about_person,omitempty" jsonschema:"who the feedback is about (default: the memory's about_person)"`
+
+	Situation    string `json:"situation,omitempty" jsonschema:"when and where it happened"`
+	Behavior     string `json:"behavior,omitempty" jsonschema:"what the person did, observable, without judgment"`
+	Impact       string `json:"impact,omitempty" jsonschema:"what it caused"`
+	ChangeSignal string `json:"change_signal,omitempty" jsonschema:"how both will know it changed"`
 }
 
 // extraction converts the host's extracted entities to the provider type,
 // or returns nil when the host sent none (the server then uses its own LLM)
 func (a ingestArgs) extraction() *providers.EntityExtraction {
-	if a.MemoryType == "" && a.Summary == "" && a.FeedbackFrom == "" && len(a.Persons) == 0 &&
+	if a.MemoryType == "" && a.Summary == "" && a.FeedbackFrom == "" && a.Assessment == nil && len(a.Persons) == 0 &&
 		len(a.Topics) == 0 && len(a.Tasks) == 0 && len(a.Relationships) == 0 && len(a.FeedbackItems) == 0 {
 		return nil
 	}
@@ -337,13 +388,24 @@ func (a ingestArgs) extraction() *providers.EntityExtraction {
 		ex.Persons = append(ex.Persons, providers.ExtractedPerson{Name: p.Name, Role: p.Role})
 	}
 	for _, t := range a.Tasks {
-		ex.Tasks = append(ex.Tasks, providers.ExtractedTask{Description: t.Description, Owner: t.Owner, AboutPerson: t.AboutPerson})
+		ex.Tasks = append(ex.Tasks, providers.ExtractedTask{Description: t.Description, Owner: t.Owner, AboutPerson: t.AboutPerson, DueDate: t.DueDate})
 	}
 	for _, r := range a.Relationships {
 		ex.Relationships = append(ex.Relationships, providers.ExtractedRel{From: r.From, To: r.To, Type: r.Type})
 	}
 	for _, f := range a.FeedbackItems {
-		ex.FeedbackItems = append(ex.FeedbackItems, providers.ExtractedFeedbackItem{Category: f.Category, Content: f.Content, AboutPerson: f.AboutPerson})
+		ex.FeedbackItems = append(ex.FeedbackItems, providers.ExtractedFeedbackItem{
+			Category: f.Category, Content: f.Content, AboutPerson: f.AboutPerson,
+			Situation: f.Situation, Behavior: f.Behavior, Impact: f.Impact, ChangeSignal: f.ChangeSignal,
+		})
+	}
+	if a.Assessment != nil {
+		ex.Assessment = &providers.ExtractedAssessment{Name: a.Assessment.Name, Cycle: a.Assessment.Cycle}
+		for _, sc := range a.Assessment.Scores {
+			ex.Assessment.Scores = append(ex.Assessment.Scores, providers.ExtractedScore{
+				Criterion: sc.Criterion, Leader: sc.Leader, Self: sc.Self, Evidence: sc.Evidence,
+			})
+		}
 	}
 	return ex
 }
@@ -359,8 +421,19 @@ func ingestDescription(cfg *config.Config) string {
 	if len(categories) > 0 {
 		feedback = "Feedback categories (format " + cfg.Feedback.Format + "): " + strings.Join(categories, ", ") + "."
 	}
+	assessment := fmt.Sprintf("- assessment: scores of the about_person by criterion, %d to %d, the leader's and/or the person's own (self), with evidence; divergences of %d points or more are flagged. ",
+		cfg.Assessment.ScaleMin, cfg.Assessment.ScaleMax, cfg.Assessment.DivergenceThreshold)
+	if len(cfg.Assessment.Criteria) > 0 {
+		assessment += fmt.Sprintf("Criteria: the %d of get_playbook, by id or name.", len(cfg.Assessment.Criteria))
+	} else {
+		assessment += "Any criteria."
+	}
+	if cfg.Assessment.Visibility == "leader_only" {
+		assessment += " Scores are the leader's private notes."
+	}
 	return strings.Join([]string{
-		"Store a memory in the leader's second brain: an observation, a conversation, a 1:1, a feedback, a voice note.",
+		"Store a memory in the leader's second brain: an observation, a conversation, a 1:1, a weekly, a skip-level, a feedback, an assessment, a voice note.",
+		"Before recording a rite (1:1, weekly, skip-level, feedback) or an assessment, call get_playbook: it says how the organization records them.",
 		"You do the understanding; the server only stores. Pass the text in content, in the user's own language and with its details.",
 		"For audio, image or video, transcribe or describe it yourself and pass that text in content (the server doesn't process media).",
 		"For long content (a meeting transcript, a long voice note), also pass segments: the same text split by subject into consecutive passages of a few paragraphs, so search can find each subject.",
@@ -368,10 +441,12 @@ func ingestDescription(cfg *config.Config) string {
 		"- about_person: who the memory is mainly about.",
 		"- persons: everyone mentioned (with role when stated). Call list_people first and reuse the stored names for people already known. A new name that looks like a stored one (\"Osmar\" when \"Osmar de Morais Junior\" is stored) is refused: ask the user whether it's the same person (then use the stored name) or someone else (then pass it in new_persons).",
 		"- topics: a few short themes, reusing the same words across memories (they are counted to spot patterns).",
-		"- tasks: follow-ups, with owner (who does it) and about_person (who it concerns).",
+		"- tasks: follow-ups and agreements, with owner (who does it), about_person (who it concerns) and due_date when a date was agreed.",
 		"- relationships: reporting lines (REPORTS_TO) and mentoring (MENTORS) stated in the content.",
-		"- memory_type feedback with feedback_items when someone's behavior is assessed, and feedback_from when the feedback was relayed by someone else.",
+		"- memory_type: one_on_one, weekly or skip_level for those meetings; feedback with feedback_items when someone's behavior is assessed (each item may also carry its situation, behavior, impact and change_signal), and feedback_from when the feedback was relayed by someone else.",
+		assessment,
 		"- occurred_at: the day it happened (YYYY-MM-DD) when the user says it wasn't today, e.g. \"a avaliação foi em 02/09\". Don't put the date only in content.",
+		"- source_url: the link to the meeting notes or document the content came from, when there is one.",
 		feedback,
 		"If the call is rejected, the error says which field to fix.",
 	}, "\n")
