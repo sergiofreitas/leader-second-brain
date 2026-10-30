@@ -58,6 +58,9 @@ rites:
     cadence_days: 60
     agenda:
       - { block: Rapport, minutes: "5" }
+    record_template: |
+      COMO CHEGOU
+      [...]
 feedback:
   checks: [Zero surpresa]
 assessment:
@@ -73,7 +76,7 @@ alerts:
 	if cfg.PlaybookSource != cfg.PlaybookFile {
 		t.Errorf("PlaybookSource = %q", cfg.PlaybookSource)
 	}
-	if got := cfg.Rites["one_on_one"]; len(got.Agenda) != 1 || got.CadenceDays != 60 {
+	if got := cfg.Rites["one_on_one"]; len(got.Agenda) != 1 || got.CadenceDays != 60 || !strings.HasPrefix(got.RecordTemplate, "COMO CHEGOU\n") {
 		t.Errorf("one_on_one = %+v, want the file's", got)
 	}
 	if got := cfg.Rites["weekly"]; got.Name != "Semanal" {

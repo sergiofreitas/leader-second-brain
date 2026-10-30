@@ -76,5 +76,6 @@ Call `list_people` first if anyone new is mentioned, to reuse stored names.
 ## 6. Output
 
 The feedback in the categories' order, ready to be recorded as the rite's
-`record` says (e.g. in Qulture, separately from the 1:1). Answer in the
-user's language (default: Portuguese).
+`record` says (e.g. in Qulture, separately from the 1:1). When the rite has
+a `record_template`, fill it section by section, in its order and headings.
+Answer in the user's language (default: Portuguese).

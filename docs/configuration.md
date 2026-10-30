@@ -134,6 +134,11 @@ rites:                       # keyed by the memory type that records them
       - { block: "Agreements", minutes: "5-10", guidance: "Each with an owner and a date." }
     max_agreements: 3
     record: "In the HR system within a week, separately from the feedback."
+    record_template: |       # optional: the text the record follows
+      HOW THEY ARRIVED
+      [...]
+      AGREEMENTS
+      - [action] — owner: [who] — due: [date]
     guidelines:
       - "The 1:1 is the led's: they talk first in each block."
 

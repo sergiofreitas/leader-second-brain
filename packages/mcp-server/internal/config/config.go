@@ -139,7 +139,10 @@ type Rite struct {
 	Agenda          []AgendaBlock `yaml:"agenda" json:"agenda,omitempty"`
 	MaxAgreements   int           `yaml:"max_agreements" json:"max_agreements,omitempty"`
 	Record          string        `yaml:"record" json:"record,omitempty"` // how and where it is recorded
-	Guidelines      []string      `yaml:"guidelines" json:"guidelines,omitempty"`
+	// RecordTemplate is the text the record follows, filled in section by
+	// section, when the organization has one
+	RecordTemplate string   `yaml:"record_template" json:"record_template,omitempty"`
+	Guidelines     []string `yaml:"guidelines" json:"guidelines,omitempty"`
 }
 
 // AgendaBlock is a part of a rite's agenda

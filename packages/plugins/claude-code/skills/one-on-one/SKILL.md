@@ -97,6 +97,9 @@ Previous agreements the meeting shows were done: `complete_task` with their
 
 The record in the shape the rite's `record` describes, ready to paste into
 the organization's system (the playbook's `feedback.target_system`, e.g.
-Qulture): summary, agreements with owner and date. Scores with visibility
+Qulture): summary, agreements with owner and date. When the rite has a
+`record_template`, fill it section by section, in its order and headings,
+with what was said and the examples given: a section the meeting didn't
+cover says so instead of being dropped. Scores with visibility
 `leader_only` are not part of it. Answer in the user's language (default:
 Portuguese).

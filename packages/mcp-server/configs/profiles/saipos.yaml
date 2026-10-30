@@ -62,7 +62,7 @@ rites:
     cadence_days: 60
     duration_minutes: 60
     max_agreements: 3
-    record: "Na Qulture, em até 1 semana e separado do feedback. Os combinados vão nas anotações."
+    record: "Nas Anotações da Qulture, em até 1 semana e separado do feedback: completo, para quem chegar depois entender o histórico. A nota prévia da liderança e as evidências brutas ficam no campo de anotações que só a liderança vê."
   weekly:
     name: "Semanal de alinhamento"
     cadence_days: 7
@@ -83,8 +83,9 @@ assessment:
   scale_min: 1
   scale_max: 5
   divergence_threshold: 2
-  # The leader's own notes: the person doesn't see the scores recorded here
-  visibility: leader_only
+  # The agreed scores go in the 1:1 record both see; the leader's score
+  # before the 1:1 stays in the leader's private notes
+  visibility: shared
 
 alerts:
   quiet_days: 28        # nothing recorded about someone for 3-4 weeks
