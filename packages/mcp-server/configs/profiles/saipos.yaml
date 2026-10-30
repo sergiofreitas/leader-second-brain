@@ -39,11 +39,54 @@ skills:
   pdi_gap_map: true
   feedback: true
 
+# The method. What is internal to Saipos (the 1:1 and feedback forms, the
+# checks before a feedback, the culture behaviors) isn't published here: it
+# comes from the playbook file each leader keeps at
+# ~/.second-brain/playbook.yaml, which overlays this profile.
+
 feedback:
   format: stop_start_continue
+  # In the order they are given: ends on what to start, not on praise
   categories:
     - { id: "stop", label: "Parar de fazer", color: "#d97757" }
-    - { id: "start", label: "Começar a fazer", color: "#788c5d" }
     - { id: "continue", label: "Continuar fazendo", color: "#6a9bcc" }
+    - { id: "start", label: "Começar a fazer", color: "#788c5d" }
   items_per_category: 2
   target_system: qulture
+  item_template: "Na [situação], percebi [comportamento]. O impacto foi [impacto]. [Pergunta ou pedido]. Vamos saber que mudou quando [sinal]."
+
+rites:
+  one_on_one:
+    name: "1:1"
+    purpose: "Conversa de desenvolvimento: performance, cultura, carreira."
+    cadence_days: 60
+    duration_minutes: 60
+    max_agreements: 3
+    record: "Nas Anotações da Qulture, em até 1 semana e separado do feedback: completo, para quem chegar depois entender o histórico. A nota prévia da liderança e as evidências brutas ficam no campo de anotações que só a liderança vê."
+  weekly:
+    name: "Semanal de alinhamento"
+    cadence_days: 7
+    guidelines:
+      - "Reservar de 10 a 15 minutos para a pauta do liderado, sem status."
+  skip_level:
+    name: "Skip-level"
+    cadence_days: 90
+    guidelines:
+      - "O que se ouve é sobre o time, não uma avaliação da liderança direta: não atribuir à pessoa."
+  feedback:
+    name: "Feedback"
+    duration_minutes: 35
+    record: "Na Qulture, em até 1 semana e separado do 1:1. O liderado pode responder dentro do feedback."
+
+assessment:
+  name: "Score de Cultura"
+  scale_min: 1
+  scale_max: 5
+  divergence_threshold: 2
+  # The agreed scores go in the 1:1 record both see; the leader's score
+  # before the 1:1 stays in the leader's private notes
+  visibility: shared
+
+alerts:
+  quiet_days: 28        # nothing recorded about someone for 3-4 weeks
+  stale_task_days: 30

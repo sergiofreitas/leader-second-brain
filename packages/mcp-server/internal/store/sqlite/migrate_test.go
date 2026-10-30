@@ -16,7 +16,7 @@ func TestOldDatabaseGetsNewColumns(t *testing.T) {
 	if err := s.InsertMemory("m1", "observation", "antes", "text", "test", "", "Ana", 1); err != nil {
 		t.Fatalf("insert memory: %v", err)
 	}
-	if err := s.InsertTask("t1", "Falar com a Ana", "", "pending"); err != nil {
+	if err := s.InsertTask("t1", "Falar com a Ana", "", "pending", ""); err != nil {
 		t.Fatalf("insert task: %v", err)
 	}
 	// Back to the v0.2 schema

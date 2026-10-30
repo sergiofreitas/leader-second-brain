@@ -23,19 +23,28 @@ func parseOccurredAt(s string, today time.Time) (string, error) {
 	if s == "" {
 		return "", nil
 	}
-	date, err := time.Parse(dateLayout, s)
+	day, err := parseDate(s)
 	if err != nil {
-		t, rfcErr := time.Parse(time.RFC3339, s)
-		if rfcErr != nil {
-			return "", fmt.Errorf("invalid occurred_at %q: use YYYY-MM-DD (e.g. 2026-09-02)", s)
-		}
-		date = t
+		return "", fmt.Errorf("invalid occurred_at %q: use YYYY-MM-DD (e.g. 2026-09-02)", s)
 	}
-	day := date.Format(dateLayout)
 	if day > today.Format(dateLayout) {
 		return "", fmt.Errorf("occurred_at %s is in the future: pass the day it happened", day)
 	}
 	return day, nil
+}
+
+// parseDate accepts a date (YYYY-MM-DD) or an RFC 3339 timestamp and
+// returns the date
+func parseDate(s string) (string, error) {
+	date, err := time.Parse(dateLayout, s)
+	if err != nil {
+		t, rfcErr := time.Parse(time.RFC3339, s)
+		if rfcErr != nil {
+			return "", err
+		}
+		date = t
+	}
+	return date.Format(dateLayout), nil
 }
 
 // rangeStart returns the earliest moment a time range covers, or the zero

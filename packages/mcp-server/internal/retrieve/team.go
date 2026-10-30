@@ -9,11 +9,18 @@ import (
 	"github.com/second-brain/second-brain/packages/mcp-server/internal/store/graph"
 )
 
-// Thresholds of the team view's signals
+// Default thresholds of the team view's signals, in days
 const (
 	quietDays     = 60 // nothing recorded about someone for this long
 	staleTaskDays = 30 // a task concerning someone pending for this long
 )
+
+// Alerts are the thresholds of the team view's signals, in days (zero: the
+// default)
+type Alerts struct {
+	QuietDays     int
+	StaleTaskDays int
+}
 
 // Member is a person of a leader's team, with their context
 type Member struct {
@@ -45,7 +52,7 @@ func (r *HybridRetriever) AssembleTeam(leaderName string, leader *graph.PersonCo
 			entry["manager"] = ctx.Managers[0]["name"]
 		}
 		if len(ctx.Tasks) > 0 {
-			entry["pending_tasks"] = TaskEntries(ctx.Tasks)
+			entry["pending_tasks"] = TaskEntries(ctx.Tasks, now)
 		}
 		if len(ctx.Feedbacks) > 0 {
 			entry["last_feedback"] = r.feedbackEntry(ctx.Feedbacks[0])
@@ -69,7 +76,7 @@ func (r *HybridRetriever) AssembleTeam(leaderName string, leader *graph.PersonCo
 			}
 			shared[name].people = append(shared[name].people, m.Node.Name)
 		}
-		if signals := memberSignals(ctx, now); len(signals) > 0 {
+		if signals := memberSignals(ctx, r.Alerts, now); len(signals) > 0 {
 			entry["signals"] = signals
 		}
 		entries = append(entries, entry)
@@ -100,14 +107,22 @@ func (r *HybridRetriever) AssembleTeam(leaderName string, leader *graph.PersonCo
 		"shared_topics": sharedTopics,
 	}
 	if leader != nil && len(leader.OwnedTasks) > 0 {
-		team["leader_pending_tasks"] = TaskEntries(leader.OwnedTasks)
+		team["leader_pending_tasks"] = TaskEntries(leader.OwnedTasks, now)
 	}
 	return team
 }
 
 // memberSignals flags what may need the leader's attention: no feedback
-// recorded, nothing recorded for a while, tasks pending for long
-func memberSignals(ctx *graph.PersonContext, now time.Time) []map[string]interface{} {
+// recorded, nothing recorded for a while, tasks pending for long or past
+// their due date
+func memberSignals(ctx *graph.PersonContext, alerts Alerts, now time.Time) []map[string]interface{} {
+	quiet, stale := alerts.QuietDays, alerts.StaleTaskDays
+	if quiet <= 0 {
+		quiet = quietDays
+	}
+	if stale <= 0 {
+		stale = staleTaskDays
+	}
 	var signals []map[string]interface{}
 	add := func(signal, detail string) {
 		signals = append(signals, map[string]interface{}{"signal": signal, "detail": detail})
@@ -117,11 +132,13 @@ func memberSignals(ctx *graph.PersonContext, now time.Time) []map[string]interfa
 	}
 	if len(ctx.Memories) == 0 {
 		add("no_recent_memory", "nothing recorded about them")
-	} else if last, ok := WhenOf(ctx.Memories[0]); ok && now.Sub(last) > quietDays*24*time.Hour {
+	} else if last, ok := WhenOf(ctx.Memories[0]); ok && now.Sub(last) > time.Duration(quiet)*24*time.Hour {
 		add("no_recent_memory", fmt.Sprintf("nothing recorded in %d days (last: %s)", int(now.Sub(last).Hours()/24), last.Format("2006-01-02")))
 	}
 	for _, t := range ctx.Tasks {
-		if created, ok := WhenOf(t); ok && now.Sub(created) > staleTaskDays*24*time.Hour {
+		if overdue(t, now) {
+			add("overdue_task", fmt.Sprintf("%q was due on %s", t["description"], t["due_date"]))
+		} else if created, ok := WhenOf(t); ok && now.Sub(created) > time.Duration(stale)*24*time.Hour {
 			add("stale_task", fmt.Sprintf("%q pending for %d days", t["description"], int(now.Sub(created).Hours()/24)))
 		}
 	}
@@ -143,29 +160,26 @@ func (r *HybridRetriever) feedbackEntry(f map[string]interface{}) map[string]int
 	return entry
 }
 
-// assessmentEntries lists a person's assessments, newest first: Assessment
-// nodes when there are, else the memories of type assessment (what ingest
-// stores, e.g. a culture score)
+// assessmentEntries lists a person's assessments, newest first: the
+// structured ones (Assessment nodes, with their scores by criterion), and
+// the memories of type assessment stored without scores
 func assessmentEntries(ctx *graph.PersonContext) []map[string]interface{} {
 	var entries []map[string]interface{}
+	structured := map[string]bool{} // memories with an Assessment node
 	for _, a := range ctx.Assessments {
 		entry := map[string]interface{}{}
-		if d, ok := a["date"].(string); ok {
-			entry["date"] = d
+		for _, key := range []string{"id", "name", "cycle", "date", "scale", "visibility", "scores", "averages", "divergences", "source_memory"} {
+			if v, ok := a[key]; ok && v != nil && v != "" {
+				entry[key] = v
+			}
 		}
-		if l, ok := a["current_level"]; ok {
-			entry["level"] = l
-		}
-		if tl, ok := a["target_level"]; ok {
-			entry["target_level"] = tl
+		if id, ok := a["source_memory"].(string); ok {
+			structured[id] = true
 		}
 		entries = append(entries, entry)
 	}
-	if len(entries) > 0 {
-		return entries
-	}
 	for _, m := range ctx.Memories {
-		if m["type"] != "assessment" {
+		if m["type"] != "assessment" || structured[fmt.Sprint(m["id"])] {
 			continue
 		}
 		entry := map[string]interface{}{}
@@ -175,7 +189,21 @@ func assessmentEntries(ctx *graph.PersonContext) []map[string]interface{} {
 		copyDates(entry, m)
 		entries = append(entries, entry)
 	}
+	sort.SliceStable(entries, func(i, j int) bool { return entryDate(entries[i]) > entryDate(entries[j]) })
 	return entries
+}
+
+// entryDate is the day an assessment entry is about, for ordering
+func entryDate(e map[string]interface{}) string {
+	for _, key := range []string{"date", "occurred_at", "created_at"} {
+		if s, ok := e[key].(string); ok && s != "" {
+			if len(s) > 10 {
+				s = s[:10]
+			}
+			return s
+		}
+	}
+	return ""
 }
 
 // WhenOf returns when what a node or search hit records happened: when a

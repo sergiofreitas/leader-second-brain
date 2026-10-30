@@ -99,11 +99,93 @@ feedback:
   format: stop_start_continue    # or "freeform" or "sandwich"
   categories:
     - { id: "stop", label: "Parar de fazer", color: "#d97757" }
-    - { id: "start", label: "Começar a fazer", color: "#788c5d" }
     - { id: "continue", label: "Continuar fazendo", color: "#6a9bcc" }
-  items_per_category: 2
+    - { id: "start", label: "Começar a fazer", color: "#788c5d" }
+  items_per_category: 2           # at most
   target_system: markdown         # or "qulture" or "lattice" or "json"
+  item_template: "In [situation], I noticed [behavior]. The impact was [impact]. We'll know it changed when [signal]."
+  checks:                         # answered before preparing a feedback
+    - "Nothing in it is a surprise to the person."
 ```
+
+The categories are given in the order they are listed. `ingest` accepts
+each item with its `situation`, `behavior`, `impact` and `change_signal`.
+
+### The method: rites, assessment, alerts
+
+How the leader's rites are run, how people are scored and when the team
+view alerts. The skills read it with the `get_playbook` tool and follow
+it, so the method lives in the configuration, not in the skills. A profile
+that defines no rites gets generic ones (`one_on_one`, `weekly`,
+`skip_level`, `feedback`).
+
+```yaml
+rites:                       # keyed by the memory type that records them
+  one_on_one:
+    name: "1:1"
+    purpose: "The led's development: performance, culture, career."
+    cadence_days: 60
+    duration_minutes: 60
+    preparation:
+      - "48 h before, the led answers: what went well, where they got stuck, what they need from me."
+    agenda:
+      - { block: "Rapport", minutes: "5", guidance: "Open with the previous agreements." }
+      - { block: "Performance", minutes: "15-20", guidance: "The led assesses first." }
+      - { block: "Agreements", minutes: "5-10", guidance: "Each with an owner and a date." }
+    max_agreements: 3
+    record: "In the HR system within a week, separately from the feedback."
+    record_template: |       # optional: the text the record follows
+      HOW THEY ARRIVED
+      [...]
+      AGREEMENTS
+      - [action] — owner: [who] — due: [date]
+    guidelines:
+      - "The 1:1 is the led's: they talk first in each block."
+
+assessment:
+  name: "Culture score"
+  scale_min: 1
+  scale_max: 5
+  divergence_threshold: 2    # leader vs self-assessment gaps flagged from this
+  visibility: leader_only    # or "shared": who may see the scores
+  guidelines: ["Justify divergences with practical evidence."]
+  criteria:                  # none: any criterion is accepted
+    - name: "Have courage"
+      group: "Ownership"
+      description: "Act without having every answer, responsibly."
+      question: "Do I propose the smallest experiment to test a new idea?"
+      example: "A new framework could speed up delivery..."
+
+alerts:
+  quiet_days: 60             # nothing recorded about someone for this long
+  stale_task_days: 30        # a task pending for this long
+```
+
+`ingest` checks an `assessment` against this: known criteria (by id or
+name; the id is the name in lowercase, without accents, hyphenated), scores
+within the scale. It stores the scores with their averages and the
+divergences, and `recall` returns them marked with their visibility.
+
+#### The playbook file: what an organization doesn't publish
+
+The profiles are embedded in the binary and published with the repository.
+An organization's internal method — its forms, its culture behaviors —
+goes in a **playbook file** each leader keeps on their computer, by
+default `~/.second-brain/playbook.yaml` (or the path in `playbook_file`).
+It has the same sections — `rites`, `feedback`, `assessment`, `alerts` —
+and overlays the profile: what it sets replaces what the profile set (a
+rite it names replaces that whole rite, a list replaces the list), the
+rest is kept.
+
+```yaml
+playbook_file: ~/.second-brain/playbook.yaml   # in config.yaml (optional)
+```
+
+The default file is optional; a `playbook_file` that doesn't exist is an
+error. A playbook with an error (an unknown key, a repeated criterion, an
+inverted scale) doesn't stop the server: it runs with the profile's
+method and `get_playbook` returns the error in `playbook_error`. Restart
+the MCP host after changing the file.
 
 ### graph
 
@@ -132,6 +214,6 @@ skills:
 ## Example profiles
 
 Built-in profiles (`second-brain init --profile NAME`, see `packages/mcp-server/configs/profiles/`):
-- `saipos` — Saipos internal (host extraction, embeddings through the LiteLLM gateway, Qulture, stop/start/continue)
+- `saipos` — Saipos internal (host extraction, embeddings through the LiteLLM gateway, Qulture, stop/continue/start, the cadence of its rites and a 1-5 culture score seen only by the leader; the forms and the culture behaviors come from the playbook file Saipos hands its leaders)
 - `startup` — Generic startup (host extraction, OpenAI embeddings, freeform)
 - `personal` — Minimal personal (host extraction, local Ollama embeddings, freeform)

@@ -53,6 +53,24 @@ make install      # build + copy to /usr/local/bin
 
 Each harness has its own plugin distribution mechanism:
 
+### Claude Desktop (chat and Cowork)
+
+A Claude Desktop extension (`.mcpb`) is a zip with a manifest and the server,
+so unlike the plugins it ships the binary: Windows and both macOS
+architectures, behind `second-brain-darwin.sh`. The manifest lives in
+`packages/plugins/claude-desktop/manifest.json`; it starts the server with
+`--profile` (a config file still wins) and maps the optional embedding
+gateway URL and key to the env vars of the `saipos` profile.
+
+```bash
+make mcpb         # dist/second-brain.mcpb (validated with @anthropic-ai/mcpb)
+make skills-zip   # dist/skills/*.zip, uploaded in Settings > Capabilities > Skills
+```
+
+Bump `version` in `manifest.json` on each release, so installed extensions
+update. Claude on the web needs a remote server, which this local-first
+design doesn't provide yet.
+
 ### Claude Code
 
 The repository is itself a Claude Code marketplace

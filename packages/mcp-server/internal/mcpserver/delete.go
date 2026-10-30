@@ -14,7 +14,7 @@ import (
 
 // HandleDeleteMemory processes a delete_memory tool call: it deletes a memory
 // stored by mistake with what was derived from it — its feedbacks and their
-// items, and the tasks that came from it. People, their relationships and
+// items, its assessment, and the tasks that came from it. People, their relationships and
 // topics are kept: other memories may share them.
 //
 // Deleting can't be undone, so it takes two calls: without confirm it only
@@ -54,6 +54,7 @@ func (s *Server) HandleDeleteMemory(ctx context.Context, args map[string]interfa
 			}
 		}
 		result["feedback_items"] = len(derived.items)
+		result["assessments"] = len(derived.assessments)
 		tasks := make([]string, len(derived.tasks))
 		for i, t := range derived.tasks {
 			tasks[i] = t.description
@@ -75,6 +76,11 @@ func (s *Server) HandleDeleteMemory(ctx context.Context, args map[string]interfa
 		for _, id := range derived.feedbacks {
 			if err := g.DeleteNode("Feedback", id); err != nil {
 				return fmt.Errorf("delete feedback: %w", err)
+			}
+		}
+		for _, id := range derived.assessments {
+			if err := g.DeleteNode("Assessment", id); err != nil {
+				return fmt.Errorf("delete assessment: %w", err)
 			}
 		}
 		for _, t := range derived.tasks {
@@ -106,12 +112,14 @@ func (s *Server) HandleDeleteMemory(ctx context.Context, args map[string]interfa
 
 // derived is what ingest created from a memory, besides the memory itself
 type derived struct {
-	feedbacks []string // Feedback node ids
-	items     []string // FeedbackItem node ids
-	tasks     []struct{ id, description string }
+	feedbacks   []string // Feedback node ids
+	items       []string // FeedbackItem node ids
+	assessments []string // Assessment node ids
+	tasks       []struct{ id, description string }
 }
 
-// derivedFrom finds the feedbacks (Memory -[FORMALIZED_IN]-> Feedback), their
+// derivedFrom finds the feedbacks and assessments (Memory -[FORMALIZED_IN]->
+// Feedback or Assessment), the feedbacks'
 // items (Feedback -[CONTAINS]-> FeedbackItem) and the tasks
 // (Task -[DERIVED_FROM]-> Memory) of a memory
 func derivedFrom(g graph.GraphEngine, memoryID string) (derived, error) {
@@ -121,6 +129,10 @@ func derivedFrom(g graph.GraphEngine, memoryID string) (derived, error) {
 		return d, err
 	}
 	for _, f := range feedbacks {
+		if _, err := g.GetNode("Assessment", f.To); err == nil {
+			d.assessments = append(d.assessments, f.To)
+			continue
+		}
 		d.feedbacks = append(d.feedbacks, f.To)
 		items, err := g.GetEdges(f.To, "CONTAINS")
 		if err != nil {

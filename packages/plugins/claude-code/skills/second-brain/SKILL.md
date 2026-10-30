@@ -20,6 +20,7 @@ who and what it is about, and send it already structured to `ingest`.
 
 | Tool | Use it to |
 |------|-----------|
+| `get_playbook` | Read the organization's method: rites, feedback format, assessment rubric, alerts |
 | `list_people` | See who is already known, to reuse their exact names |
 | `ingest` | Store a memory with the entities you extracted |
 | `rename_person` | Give a known person a new name (their full name, a typo fix) |
@@ -28,6 +29,13 @@ who and what it is about, and send it already structured to `ingest`.
 | `recall` | Get the full context about a person for a situation |
 | `search_memories` | Find memories by subject, word or meaning |
 | `get_team_context` | Review a leader's team: each person and what they share |
+
+## The organization's method
+
+How 1:1s, weeklies, skip-levels and feedbacks are run and recorded, how
+people are scored and when to alert is the organization's, not yours:
+`get_playbook` returns it. Read it before preparing or recording any of
+them, and follow it. The `one-on-one` and `feedback` skills do this.
 
 ## Capturing (ingest)
 
@@ -56,15 +64,21 @@ who and what it is about, and send it already structured to `ingest`.
    - `topics` — 1 to 4 short themes, reusing words already used for that
      person and the team (they are counted to show patterns, e.g.
      "microgestão", and shared across people in the team review)
-   - `tasks` — follow-ups, with `owner` (who does it) and `about_person`
-     (who it concerns)
+   - `tasks` — follow-ups and agreements, with `owner` (who does it),
+     `about_person` (who it concerns) and `due_date` (`YYYY-MM-DD`) when a
+     date was agreed
    - `relationships` — reporting lines (`REPORTS_TO`: from reports to to)
      and mentoring (`MENTORS`) when stated
-   - `memory_type` — `observation`, `feedback`, `one_on_one`, `assessment`
-     or `voice_note`
+   - `memory_type` — `observation`, `feedback`, `one_on_one`, `weekly`,
+     `skip_level`, `assessment` or `voice_note`
    - for feedback: `feedback_items` in the configured categories (listed in
-     the `ingest` tool description) and `feedback_from` when someone else
-     gave it
+     the `ingest` tool description), each optionally with its `situation`,
+     `behavior`, `impact` and `change_signal`, and `feedback_from` when
+     someone else gave it
+   - for scores (a culture score, a self-assessment): `assessment` with
+     `scores` by `criterion` (the playbook's criteria), the `leader`'s and
+     the person's own (`self`), and `evidence`
+   - `source_url` — the link to the meeting notes or document it came from
    - `summary` — one sentence
    - `occurred_at` — the day it happened (`YYYY-MM-DD`) when it wasn't
      today: "a avaliação foi em 02/09", "o 1:1 de segunda". Briefings order
@@ -125,9 +139,11 @@ ingest(
   context `1:1`, `pdi`, `feedback`, `team_review`, `progression` or
   `general`. The name can be how the leader calls the person ("Natiele");
   if several people match, the answer lists them: ask which one. It returns
-  the hierarchy, memories, pending tasks (with who owns them and their id),
-  tasks completed in the period, feedbacks (with their items and who gave
-  them), assessments, recurring topics and a recommendation. It covers the
+  the hierarchy, memories, pending tasks (with who owns them, their id,
+  due date and whether they are `overdue`), tasks completed in the period,
+  feedbacks (with their items and who gave them), assessments (scores by
+  criterion, averages and divergences), recurring topics and a
+  recommendation. It covers the
   last 90 days by when things happened; pass `time_range` (`last_30d`,
   `last_year`, `all`) for another period. Dates are in `occurred_at` (when
   it happened) and `created_at` (when it was recorded): cite `occurred_at`
@@ -143,7 +159,7 @@ ingest(
 - For a team ("como está o time?", "que ações coletivas fazer?"):
   `get_team_context(leader_name)`. For each person it returns pending tasks,
   last feedback, last assessment, recurring topics and `signals`
-  (`no_feedback`, `no_recent_memory`, `stale_task`). `shared_topics` lists
+  (`no_feedback`, `no_recent_memory`, `stale_task`, `overdue_task`). `shared_topics` lists
   the topics several people share and who — the starting point for
   collective actions — and `leader_pending_tasks` what the leader has to do.
   The topics are only as good as their reuse: same words across people.
@@ -155,6 +171,11 @@ say what is missing rather than filling gaps.
 
 These are notes about people. Store what the leader tells you, as they said
 it; don't add judgments of your own to the memory.
+
+Assessments with visibility `leader_only` are the leader's private notes:
+never put their scores in anything meant for the person (a 1:1 record, a
+feedback, a message). The same goes for what someone else said about the
+person: it informs the leader, it isn't quoted to the person.
 
 ## Language
 

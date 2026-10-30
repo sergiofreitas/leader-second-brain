@@ -86,10 +86,12 @@ type EntityExtraction struct {
 	// FeedbackFrom is who gave the feedback, when it was relayed by someone
 	// else (e.g. a report talking about their manager)
 	FeedbackFrom string `json:"feedback_from,omitempty"`
+	// Assessment is a structured score of the about_person, by criterion
+	Assessment *ExtractedAssessment `json:"assessment,omitempty"`
 }
 
 // MemoryTypes are the accepted values of EntityExtraction.MemoryType
-var MemoryTypes = []string{"observation", "feedback", "one_on_one", "assessment", "voice_note"}
+var MemoryTypes = []string{"observation", "feedback", "one_on_one", "weekly", "skip_level", "assessment", "voice_note"}
 
 // PersonRelationshipTypes are the accepted person-to-person relationship types
 var PersonRelationshipTypes = []string{"REPORTS_TO", "MENTORS", "WORKS_WITH"}
@@ -103,6 +105,7 @@ type ExtractedTask struct {
 	Description string `json:"description"`
 	Owner       string `json:"owner"`                  // who has to do it (optional)
 	AboutPerson string `json:"about_person,omitempty"` // who it concerns (defaults to the memory's about_person)
+	DueDate     string `json:"due_date,omitempty"`     // YYYY-MM-DD (optional)
 }
 
 type ExtractedRel struct {
@@ -117,4 +120,24 @@ type ExtractedFeedbackItem struct {
 	Category    string `json:"category"` // matches config FeedbackCategoryIDs
 	Content     string `json:"content"`
 	AboutPerson string `json:"about_person,omitempty"`
+	// The parts of the item, when it was built from them (all optional)
+	Situation    string `json:"situation,omitempty"`
+	Behavior     string `json:"behavior,omitempty"`
+	Impact       string `json:"impact,omitempty"`
+	ChangeSignal string `json:"change_signal,omitempty"` // how both will know it changed
+}
+
+// ExtractedAssessment is a score by criterion: the leader's and the
+// person's own, with the evidence behind it
+type ExtractedAssessment struct {
+	Name   string           `json:"name,omitempty"`  // default: the configured assessment
+	Cycle  string           `json:"cycle,omitempty"` // e.g. "2026-10" or "2026 H2"
+	Scores []ExtractedScore `json:"scores"`
+}
+
+type ExtractedScore struct {
+	Criterion string `json:"criterion"`        // a configured criterion's id or name
+	Leader    *int   `json:"leader,omitempty"` // the leader's score
+	Self      *int   `json:"self,omitempty"`   // the person's own score
+	Evidence  string `json:"evidence,omitempty"`
 }

@@ -41,6 +41,9 @@ type Server struct {
 
 // New creates a new MCP server with all dependencies wired
 func New(cfg *config.Config) (*Server, error) {
+	// A config built in code gets the defaults a loaded one has
+	cfg.ApplyDefaults()
+
 	// Initialize SQLite store
 	store, err := sqlite.New(cfg.Storage.SQLite.Path)
 	if err != nil {
@@ -79,7 +82,7 @@ func New(cfg *config.Config) (*Server, error) {
 		store:     store,
 		graph:     graphEngine,
 		llm:       llm,
-		retriever: retrieve.NewHybridRetriever(store, graphEngine, nil),
+		retriever: newRetriever(store, graphEngine, nil, cfg),
 		adapter:   adapters.NewAdapter(cfg.Feedback.TargetSystem),
 	}
 
@@ -117,7 +120,7 @@ func (s *Server) EnableSemanticSearch(embedder providers.EmbeddingProvider) erro
 	}
 	ctx, cancel := context.WithCancel(context.Background())
 	s.embedding, s.indexer = embedder, ix
-	s.retriever = retrieve.NewHybridRetriever(s.store, s.graph, embedder)
+	s.retriever = newRetriever(s.store, s.graph, embedder, s.cfg)
 	s.stopIndexer, s.indexerDone = cancel, make(chan struct{})
 	go func() {
 		defer close(s.indexerDone)
@@ -125,6 +128,13 @@ func (s *Server) EnableSemanticSearch(embedder providers.EmbeddingProvider) erro
 	}()
 	log.Printf("Semantic search: enabled with %s", ix.Model())
 	return nil
+}
+
+// newRetriever builds the retriever with the configured alert thresholds
+func newRetriever(store *sqlite.Store, g graph.GraphEngine, embedder providers.EmbeddingProvider, cfg *config.Config) *retrieve.HybridRetriever {
+	r := retrieve.NewHybridRetriever(store, g, embedder)
+	r.Alerts = retrieve.Alerts{QuietDays: cfg.Alerts.QuietDays, StaleTaskDays: cfg.Alerts.StaleTaskDays}
+	return r
 }
 
 // backfillChunks splits the memories that have no chunks yet
